@@ -32,7 +32,7 @@ flipper(N=500,p=0.8)
 
 #### And here is multiple trials just for fun...
 
-```{r 3.1.2,cache=FALSE}
+```{r 3.1.2,cache=TRUE}
 flip.dist<-function(n.sims,N,p){
   tmp<-data.frame(flip=c(1:N))
   for(i in 1:n.sims){

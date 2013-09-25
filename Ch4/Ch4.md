@@ -8,6 +8,8 @@ Chapter 4 Homework
 
 --------------------------------------------------------
 
+Note: In this assignment, $\theta=1$ will designate actually having the disease (the frowning face), while $D=1$ will designate a positive test result (the plus sign).
+
 ### 4.3) Natural Frequency and Markov representations
 
 #### 4.3.A) Calculate table frequencies
@@ -36,18 +38,18 @@ $10000000 * p(\theta=1)=freq(\theta=1)=10000$ |$10000000*p(\theta=0)=freq(\theta
 $10000*p(D=1|\theta=1)=9900$  |$9990000*p(D=1|\theta=0)=499500$  
 $9900*p(D=0|\theta=1)=99$  |$499500*p(D=0|\theta=0)=474525$
 
-Assuming that the test and retest are independent, the total number of people who tested positive = 5.094 &times; 10<sup>5</sup>, $p(D=0|\theta=1)=0.01$, and $p(D=0|\theta=0)=0.95$, the total number of people expected to show negative results upon retesting is 4.7462 &times; 10<sup>5</sup>. 
+Assuming that the test and retest are independent, $freq(D=1,0)=freq(D=1|\theta=1)p(D=0|\theta=1)+freq(D=1|\theta=0)p(D=0|\theta=0)=(9900)(0.01)+(49950)(0.95)=99+474525=474624$. 
 
 #### 4.3.D) What is the proportion of those who first test positive then retest negative actually have the disease?
 
- $\frac{99}{474620}=0.00021$. This makes sense given the very low prior probability of having the disease in the first place.
+ $\frac{99}{474624}=0.0002$. This makes sense given the very low prior probability of having the disease in the first place.
 
-#### 4.4) What is the probability that a random person has the disease given a negative test. Given a negative test and positive retest?
+#### 4.4) What is the probability that a random person has the disease given a negative test? Given a negative test and positive retest?
 
 Probability that the person has the disease with a negative initial test:  
   
-$\frac{p(\theta=1|D=0)=p(D=0|\theta=1)p(\theta=1)}{p(D=0)} = \frac{0.01*0.001}{0.94906}=0.00001$  
+$p(\theta=1|D=0)=\frac{p(D=0|\theta=1)p(\theta=1)}{p(D=0)} = \frac{0.01*0.001}{0.94906}=0.00001$  
 
 Probability that the person has the disease with negative initial test and positive retest:  
 
-$\frac{p(\theta=1|D=1)=p(D=1|\theta=1)p(\theta=1)}{p(\theta=1)}=\frac{0.99*0.001}{0.05094}=0.01943$  
+$p(\theta=1|D=0,1)=\frac{p(D=1|\theta=1)p(\theta=1)}{p(D=1)}=\frac{0.99*0.00001}{0.05094}=0.0002$  
