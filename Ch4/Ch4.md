@@ -52,4 +52,4 @@ $p(\theta=1|D=0)=\frac{p(D=0|\theta=1)p(\theta=1)}{p(D=0)} = \frac{0.01*0.001}{0
 
 Probability that the person has the disease with negative initial test and positive retest:  
 
-$p(\theta=1|D=0,1)=\frac{p(D=1|\theta=1)p(\theta=1)}{p(D=1)}=\frac{0.99*0.00001}{0.05094}=0.0002$  
+$p(\theta=1|D=0,1)=\frac{p(D=1|\theta=1)p(\theta=1|D=0)}{p(D=1)}=\frac{0.99*0.00001}{0.05094}=0.0002$  
