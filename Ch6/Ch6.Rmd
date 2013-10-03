@@ -1,0 +1,71 @@
+Doing Bayesian Data Analysis
+Chapter 6 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+### October 1, 2013
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+```{r load functions}
+rm(list=ls())
+source('G:/documents/coursework/bayesian/functions/BernGrid.R')
+```
+
+
+### 6.2) Practice specifying a non-beta prior. Specify prior, display posterior beliefs
+ 
+```{r 6.2}
+pTheta<-c(50:1,rep(1,50),1:50,50:1,rep(1,50),1:50)
+pTheta<-pTheta/sum(pTheta)
+plot(pTheta,type='l')
+width<-1/length(pTheta)
+Theta<-seq(from=width/2,to=1-width/2,by=width)
+data<-c(rep(1,15),rep(0,5))
+BernGrid(Theta=Theta,pTheta=pTheta,Data=data)
+```
+
+### 6.3) Use BernGrid for sequential update.
+
+```{r 6.3}
+data<-c(0,1,1,1) # Four trials, 3 heads
+(t1<-BernGrid(Theta=Theta,pTheta=pTheta,Data=data))
+data2<-c(rep(1,12),rep(0,4))
+t2<-BernGrid(Theta=Theta,pTheta=t1,Data=data2)
+```
+
+### 6.4) Connect HDIs to the real world.
+
+#### 6.4.A) Prior belief is neutral uniform distribution (0.5). Let $p(1)=p(A), p(0)=p(B)$.
+
+```{r 6.4}
+Theta<-seq(from=0,to=1,by=0.01)
+pTheta<-c(rep(1/101,length(Theta)))
+data<-c(rep(1,58),rep(0,42))
+(t1<-BernGrid(Theta=Theta,pTheta=pTheta,Data=data))
+```
+
+
+#### 6.4.B) It is still credible to believe (based on 95% HDI) that the population is equally divided.
+
+#### 6.4.C) Update beliefs with new data.
+
+```{r 6.4.C}
+data2<-c(rep(1,57),rep(0,43))
+(t2<-BernGrid(Theta=Theta,pTheta=t1,Data=data2))
+```
+
+#### 6.4.D) It is no longer credible to believe that the population is equally divided.
+
+### 6.7) Use a grid approximation to compare models
+```{r 6.7}
+theta<-seq(from=0,to=1,by=0.01)
+pTheta1<-c(theta^2/sum(theta^2))
+pTheta2<-c((1-theta)^2/sum((1-theta)^2))
+data<-c(rep(1,6),rep(0,2))
+mod1<-BernGrid(Theta=theta,pTheta=pTheta1,Data=data)
+mod2<-BernGrid(Theta=theta,pTheta=pTheta2,Data=data)
+(BF<-0.00597/0.00128)
+```
+#### Bayes factor of Model1:Model2 = 4.664. Model 1 appears better,
