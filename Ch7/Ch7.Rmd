@@ -1,0 +1,57 @@
+Doing Bayesian Data Analysis
+Chapter 7 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+### October 4, 2013
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+### 7.1) Use varying proposal distributions in the Metropolis algorithm
+
+```{r 7.1}
+BernLike<-function(theta,data){ # This function is defined for Bernoulli, but We could use any distributional kernel with proper parameterization
+  z<-sum(data) # number of successes in Bernoulli trials
+  N<-length(data) # number of trials
+  likelihood<-(theta)^z*(1-theta)^(N-z) # Probability mass function of the Bernoulli distribution
+  likelihood[likelihood>1|likelihood<0]=0 # Keeps likelihood between 0 and 1
+  return(likelihood)
+}
+
+prior<-function(theta){
+#   prior=rep(1,length(theta)) # Is there a reason not to choose runif here?
+  prior=rep(runif(1),length(theta)) 
+  prior[prior>1|prior<0]=0 # Keeps prior between 0 and 1, but unnecessary when hard-coded as 1 (as Kruschke does)
+  return(prior)
+}
+
+BernTarget<-function(theta,data){
+  target<-BernLike(theta,data)*prior(theta) # a vector of 'relative probabilities' (just likelihood * prior...)
+  return(target)
+}
+
+Metropolis<-function(nJumps,burnin=ceiling(0.1*walks),jumpSD,data){
+  nJumps<-nJumps # Length of algorithm
+  traj<-c(runif(1),rep(0,nJumps-1)) # Output vector with arbitrary starting value, NA for the rest of the vector
+  burnin<-ceiling(0.1*walks) # Define burnin as 0.1 * length of algorithm
+  nAccept<-0 # Counter for number of jumps accepted
+  nReject<-0 # Counter for number of jumps rejected
+  for(t in 1:traj){
+    position=traj[t]
+    jmp=rnorm(1,mean=0,sd=jumpSD) # Random jump
+    pAccept=min(1,BernTarget(position+jmp,data)/BernTarget(position,data)) # smallest of 1 and ratio of new position:current position
+    if(runif(1)<pAccept){traj[t+1]=position+jmp # Flip to see if value is accepted
+                         if(t>burnin){nAccept=nAccept+1} # Increment the accepted counter
+    }
+    else{traj[t+1]=position
+         if(t>burnin){nReject=nReject+1}
+         }
+  }
+  out<-traj[burnin+1:length(traj)]
+  return(out)
+}
+
+set.seed(4705)
+Metropolis(nJumps=60000,data=data,jumpSD=0.1)
+```
