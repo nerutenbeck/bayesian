@@ -3,55 +3,721 @@ Chapter 7 Homework
 ========================================================
 
 ## Nathan E. Rutenbeck
-### October 4, 2013
+
 [GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
 
 --------------------------------------------------------
 
-### 7.1) Use varying proposal distributions in the Metropolis algorithm
+## 7.1) Use varying proposal distributions in the Metropolis algorithm
 
-```{r 7.1}
-BernLike<-function(theta,data){ # This function is defined for Bernoulli, but We could use any distributional kernel with proper parameterization
-  z<-sum(data) # number of successes in Bernoulli trials
-  N<-length(data) # number of trials
-  likelihood<-(theta)^z*(1-theta)^(N-z) # Probability mass function of the Bernoulli distribution
-  likelihood[likelihood>1|likelihood<0]=0 # Keeps likelihood between 0 and 1
-  return(likelihood)
+### 7.1.A) SD = 0.1
+```{r 7.1.A via Kruschke,echo=FALSE, fig.width=10}
+# Use this program as a template for experimenting with the Metropolis
+# algorithm applied to a single parameter called theta, defined on the 
+# interval [0,1].
+
+# Specify the data, to be used in the likelihood function.
+# This is a vector with one component per flip,
+# in which 1 means a "head" and 0 means a "tail".
+myData = c( 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0 )
+
+# Define the Bernoulli likelihood function, p(D|theta).
+# The argument theta could be a vector, not just a scalar.
+likelihood = function( theta , data ) {
+  z = sum( data == 1 )
+  N = length( data )
+  pDataGivenTheta = theta^z * (1-theta)^(N-z)
+  # The theta values passed into this function are generated at random,
+  # and therefore might be inadvertently greater than 1 or less than 0.
+  # The likelihood for theta > 1 or for theta < 0 is zero:
+  pDataGivenTheta[ theta > 1 | theta < 0 ] = 0
+  return( pDataGivenTheta )
 }
 
-prior<-function(theta){
-#   prior=rep(1,length(theta)) # Is there a reason not to choose runif here?
-  prior=rep(runif(1),length(theta)) 
-  prior[prior>1|prior<0]=0 # Keeps prior between 0 and 1, but unnecessary when hard-coded as 1 (as Kruschke does)
-  return(prior)
+# Define the prior density function. For purposes of computing p(D),
+# at the end of this program, we want this prior to be a proper density.
+# The argument theta could be a vector, not just a scalar.
+prior = function( theta ) {
+  prior = rep( 1 , length(theta) ) # uniform density over [0,1]
+  # For kicks, here's a bimodal prior. To try it, uncomment the next line.
+  #prior = dbeta( pmin(2*theta,2*(1-theta)) ,2,2 )
+  # The theta values passed into this function are generated at random,
+  # and therefore might be inadvertently greater than 1 or less than 0.
+  # The prior for theta > 1 or for theta < 0 is zero:
+  prior[ theta > 1 | theta < 0 ] = 0
+  return( prior )
 }
 
-BernTarget<-function(theta,data){
-  target<-BernLike(theta,data)*prior(theta) # a vector of 'relative probabilities' (just likelihood * prior...)
-  return(target)
+# Define the relative probability of the target distribution, 
+# as a function of vector theta. For our application, this
+# target distribution is the unnormalized posterior distribution.
+targetRelProb = function( theta , data ) {
+  targetRelProb =  likelihood( theta , data ) * prior( theta )
+  return( targetRelProb )
 }
 
-Metropolis<-function(nJumps,burnin=ceiling(0.1*walks),jumpSD,data){
-  nJumps<-nJumps # Length of algorithm
-  traj<-c(runif(1),rep(0,nJumps-1)) # Output vector with arbitrary starting value, NA for the rest of the vector
-  burnin<-ceiling(0.1*walks) # Define burnin as 0.1 * length of algorithm
-  nAccept<-0 # Counter for number of jumps accepted
-  nReject<-0 # Counter for number of jumps rejected
-  for(t in 1:traj){
-    position=traj[t]
-    jmp=rnorm(1,mean=0,sd=jumpSD) # Random jump
-    pAccept=min(1,BernTarget(position+jmp,data)/BernTarget(position,data)) # smallest of 1 and ratio of new position:current position
-    if(runif(1)<pAccept){traj[t+1]=position+jmp # Flip to see if value is accepted
-                         if(t>burnin){nAccept=nAccept+1} # Increment the accepted counter
-    }
-    else{traj[t+1]=position
-         if(t>burnin){nReject=nReject+1}
-         }
+# Specify the length of the trajectory, i.e., the number of jumps to try:
+trajLength = 55556 # arbitrary large number
+# Initialize the vector that will store the results:
+trajectory = rep( 0 , trajLength )
+# Specify where to start the trajectory:
+trajectory[1] = 0.50 # arbitrary value
+# Specify the burn-in period:
+burnIn = ceiling( 0.1 * trajLength ) # arbitrary number, less than trajLength
+# Initialize accepted, rejected counters, just to monitor performance:
+nAccepted = 0
+nRejected = 0
+# Specify seed to reproduce same random walk:
+set.seed(47405)
+
+# Now generate the random walk. The 't' index is time or trial in the walk.
+for ( t in 1:(trajLength-1) ) {
+  currentPosition = trajectory[t]
+  # Use the proposal distribution to generate a proposed jump.
+  # The shape and variance of the proposal distribution can be changed
+  # to whatever you think is appropriate for the target distribution.
+  proposedJump = rnorm( 1 , mean = 0 , sd = 0.1 )
+  # Compute the probability of accepting the proposed jump.
+  probAccept = min( 1,
+                    targetRelProb( currentPosition + proposedJump , myData )
+                    / targetRelProb( currentPosition , myData ) )
+  # Generate a random uniform value from the interval [0,1] to
+  # decide whether or not to accept the proposed jump.
+  if ( runif(1) < probAccept ) {
+    # accept the proposed jump
+    trajectory[ t+1 ] = currentPosition + proposedJump
+    # increment the accepted counter, just to monitor performance
+    if ( t > burnIn ) { nAccepted = nAccepted + 1 }
+  } else {
+    # reject the proposed jump, stay at current position
+    trajectory[ t+1 ] = currentPosition
+    # increment the rejected counter, just to monitor performance
+    if ( t > burnIn ) { nRejected = nRejected + 1 }
   }
-  out<-traj[burnin+1:length(traj)]
-  return(out)
 }
 
-set.seed(4705)
-Metropolis(nJumps=60000,data=data,jumpSD=0.1)
+# Extract the post-burnIn portion of the trajectory.
+acceptedTraj = trajectory[ (burnIn+1) : length(trajectory) ]
+
+# End of Metropolis algorithm.
+
+#-----------------------------------------------------------------------
+# Display the posterior.
+
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+mcmcInfo = plotPost( acceptedTraj , xlim=c(0,1) , xlab=bquote(theta) )
+
+# Display rejected/accepted ratio in the plot.
+# Get the highest point and mean of the plot for subsequent text positioning:
+densMax = max( density( acceptedTraj )$y )
+meanTraj = mean( acceptedTraj )
+sdTraj = sd( acceptedTraj )
+if ( meanTraj > .5 ) {
+  xpos = 0.0 ; xadj = 0.0
+} else {
+  xpos = 1.0 ; xadj = 1.0
+}
+text( xpos , 0.75*densMax ,
+      bquote(  N[pro] * "=" * .(length(acceptedTraj)) * "  " *
+                frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
+      ) , adj=c(xadj,0)  )
+
+#------------------------------------------------------------------------
+# Evidence for model, p(D).
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+
+
 ```
+
+### 7.1.B) SD = 0.001
+```{r 7.1.B,echo=FALSE, fig.width=10}
+
+set.seed(47405)
+# Now generate the random walk. The 't' index is time or trial in the walk.
+for ( t in 1:(trajLength-1) ) {
+  currentPosition = trajectory[t]
+  # Use the proposal distribution to generate a proposed jump.
+  # The shape and variance of the proposal distribution can be changed
+  # to whatever you think is appropriate for the target distribution.
+  proposedJump = rnorm( 1 , mean = 0 , sd = 0.0001 )
+  # Compute the probability of accepting the proposed jump.
+  probAccept = min( 1,
+                    targetRelProb( currentPosition + proposedJump , myData )
+                    / targetRelProb( currentPosition , myData ) )
+  # Generate a random uniform value from the interval [0,1] to
+  # decide whether or not to accept the proposed jump.
+  if ( runif(1) < probAccept ) {
+    # accept the proposed jump
+    trajectory[ t+1 ] = currentPosition + proposedJump
+    # increment the accepted counter, just to monitor performance
+    if ( t > burnIn ) { nAccepted = nAccepted + 1 }
+  } else {
+    # reject the proposed jump, stay at current position
+    trajectory[ t+1 ] = currentPosition
+    # increment the rejected counter, just to monitor performance
+    if ( t > burnIn ) { nRejected = nRejected + 1 }
+  }
+}
+
+# Extract the post-burnIn portion of the trajectory.
+acceptedTraj = trajectory[ (burnIn+1) : length(trajectory) ]
+
+# End of Metropolis algorithm.
+
+#-----------------------------------------------------------------------
+# Display the posterior.
+
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+mcmcInfo = plotPost( acceptedTraj , xlim=c(0,1) , xlab=bquote(theta) )
+
+# Display rejected/accepted ratio in the plot.
+# Get the highest point and mean of the plot for subsequent text positioning:
+densMax = max( density( acceptedTraj )$y )
+meanTraj = mean( acceptedTraj )
+sdTraj = sd( acceptedTraj )
+if ( meanTraj > .5 ) {
+  xpos = 0.0 ; xadj = 0.0
+} else {
+  xpos = 1.0 ; xadj = 1.0
+}
+text( xpos , 0.75*densMax ,
+      bquote(  N[pro] * "=" * .(length(acceptedTraj)) * "  " *
+                frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
+      ) , adj=c(xadj,0)  )
+
+#------------------------------------------------------------------------
+# Evidence for model, p(D).
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+
+
+```
+
+### 7.1.C) SD = 100
+```{r 7.1.C, echo=FALSE, fig.width=10}
+set.seed(47405)
+# Now generate the random walk. The 't' index is time or trial in the walk.
+for ( t in 1:(trajLength-1) ) {
+  currentPosition = trajectory[t]
+  # Use the proposal distribution to generate a proposed jump.
+  # The shape and variance of the proposal distribution can be changed
+  # to whatever you think is appropriate for the target distribution.
+  proposedJump = rnorm( 1 , mean = 0 , sd = 100 )
+  # Compute the probability of accepting the proposed jump.
+  probAccept = min( 1,
+                    targetRelProb( currentPosition + proposedJump , myData )
+                    / targetRelProb( currentPosition , myData ) )
+  # Generate a random uniform value from the interval [0,1] to
+  # decide whether or not to accept the proposed jump.
+  if ( runif(1) < probAccept ) {
+    # accept the proposed jump
+    trajectory[ t+1 ] = currentPosition + proposedJump
+    # increment the accepted counter, just to monitor performance
+    if ( t > burnIn ) { nAccepted = nAccepted + 1 }
+  } else {
+    # reject the proposed jump, stay at current position
+    trajectory[ t+1 ] = currentPosition
+    # increment the rejected counter, just to monitor performance
+    if ( t > burnIn ) { nRejected = nRejected + 1 }
+  }
+}
+
+# Extract the post-burnIn portion of the trajectory.
+acceptedTraj = trajectory[ (burnIn+1) : length(trajectory) ]
+
+# End of Metropolis algorithm.
+
+#-----------------------------------------------------------------------
+# Display the posterior.
+
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+mcmcInfo = plotPost( acceptedTraj , xlim=c(0,1) , xlab=bquote(theta) )
+
+# Display rejected/accepted ratio in the plot.
+# Get the highest point and mean of the plot for subsequent text positioning:
+densMax = max( density( acceptedTraj )$y )
+meanTraj = mean( acceptedTraj )
+sdTraj = sd( acceptedTraj )
+if ( meanTraj > .5 ) {
+  xpos = 0.0 ; xadj = 0.0
+} else {
+  xpos = 1.0 ; xadj = 1.0
+}
+text( xpos , 0.75*densMax ,
+      bquote(  N[pro] * "=" * .(length(acceptedTraj)) * "  " *
+                frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
+      ) , adj=c(xadj,0)  )
+
+#------------------------------------------------------------------------
+# Evidence for model, p(D).
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+
+```
+
+
+### 7.1.D) The trial with the standard deviation of 0.1 (first trial) seems best, though it had a lower acceptance rate than the other two. This suggests there is some balance between the need to have enough accepted, but also to reject enough. Trials two and three had equal acceptance rates (higher than Trial 1)
+
+### 7.1.E) I think looking visually at the results tells us a lot - though I suppose in a complicated case where the posterior is completely crazy you couldn't necessarily know, but for most models visual assessment seems like a good metric. I suppose this is where tests for convergence such as Rhat come in with Jags programming.
+
+---------------------------------------------------------------------------
+
+## 7.3) Apply Metropolis algorithm. Compare to grid approximation
+
+### 7.3.A) $p(\theta|D)=\frac{p(D|\theta)p(\theta)}{p(D)} = \frac{p(D|\theta)p(\theta)}{\int p(D|\theta)p(\theta)} = \frac{(\theta^8)(1-\theta^{12-8})[(\cos(4\pi\theta+1)]^2}{\int d\theta(\theta^8)(1-\theta^{12-8})[(\cos(4\pi\theta+1)]^2}$ The prior and likelihood are probably not conjugate.
+
+### 7.3.B) Estimation via grid approximation. Note the following output is one of the reasons I am increasingly annoyed by the canned Kruschke programs...
+
+```{r 7.3.B,echo=FALSE,}
+source('G:/documents/coursework/bayesian/functions/BernGrid.R')
+
+  #  Theta is a vector of theta values, all between 0 and 1.
+  #  pTheta is a vector of corresponding probability _masses_.
+  #  Data is a vector of 1's and 0's, where 1 corresponds to a and 0 to b.
+  #  credib is the probability mass of the credible interval, default is 0.95.
+  #  nToPlot is the number of grid points to plot; defaults to all of them.
+  # Output:
+  #  pThetaGivenData is a vector of posterior probability masses over Theta.
+  #  Also creates a three-panel graph of prior, likelihood, and posterior 
+  #  probability masses with credible interval.
+  # Example of use:
+  #  # Create vector of theta values.
+  #  > binwidth = 1/1000
+  #  > thetagrid = seq( from=binwidth/2 , to=1-binwidth/2 , by=binwidth )
+  #  # Specify probability mass at each theta value.
+  #  > relprob = pmin(thetagrid,1-thetagrid) # relative prob at each theta
+  #  > prior = relprob / sum(relprob) # probability mass at each theta
+  #  # Specify the data vector.
+  #  > datavec = c( rep(1,3) , rep(0,1) ) # 3 heads, 1 tail
+  #  # Call the function.
+  #  > posterior = BernGrid( Theta=thetagrid , pTheta=prior , Data=datavec )
+  # Hints:
+  #  You will need to "source" this function before calling it.
+  #  You may want to define a tall narrow window before using it; e.g.,
+  #  > source("openGraphSaveGraph.R")
+  #  > openGraph(width=7,height=10,mag=0.7)
+
+theta<-seq(from=0,to=1,by=0.001)
+pTheta<-(cos(4*theta*pi)+1)^2 
+pTheta<-pTheta/sum(pTheta)
+data<-c(rep(1,8),rep(0,4))
+BernGrid(Theta=theta,pTheta=pTheta,Data=data)
+```
+
+
+### 7.3.C) Estimation via Metropolis algorithm. It is possible to generate a posterior sample either by normalizing the prior or not. Normalizing the posterior generates a different result than in using the grid approximation, however. Results below are with a non-normalized prior.
+
+```{r 7.3.C,echo=FALSE}
+# Use this program as a template for experimenting with the Metropolis
+# algorithm applied to a single parameter called theta, defined on the 
+# interval [0,1].
+
+# Specify the data, to be used in the likelihood function.
+# This is a vector with one component per flip,
+# in which 1 means a "head" and 0 means a "tail".
+myData = c(rep(0,4),rep(1,8))
+
+# Define the Bernoulli likelihood function, p(D|theta).
+# The argument theta could be a vector, not just a scalar.
+likelihood = function( theta , data ) {
+  z = sum( data == 1 )
+  N = length( data )
+  pDataGivenTheta = theta^z * (1-theta)^(N-z)
+  # The theta values passed into this function are generated at random,
+  # and therefore might be inadvertently greater than 1 or less than 0.
+  # The likelihood for theta > 1 or for theta < 0 is zero:
+  pDataGivenTheta[ theta > 1 | theta < 0 ] = 0
+  return( pDataGivenTheta )
+}
+
+# Define the prior density function. For purposes of computing p(D),
+# at the end of this program, we want this prior to be a proper density.
+# The argument theta could be a vector, not just a scalar.
+prior = function( theta ) {
+  prior = (cos(4*theta*pi)+1)^2
+  return( prior )
+}
+
+# Define the relative probability of the target distribution, 
+# as a function of vector theta. For our application, this
+# target distribution is the unnormalized posterior distribution.
+targetRelProb = function( theta , data ) {
+  targetRelProb =  likelihood( theta , data ) * prior( theta )
+  return( targetRelProb )
+}
+
+# Specify the length of the trajectory, i.e., the number of jumps to try:
+trajLength = 55556 # arbitrary large number
+# Initialize the vector that will store the results:
+trajectory = rep( 0 , trajLength )
+# Specify where to start the trajectory:
+trajectory[1] = 0.50 # arbitrary value
+# Specify the burn-in period:
+burnIn = ceiling( 0.1 * trajLength ) # arbitrary number, less than trajLength
+# Initialize accepted, rejected counters, just to monitor performance:
+nAccepted = 0
+nRejected = 0
+# Specify seed to reproduce same random walk:
+set.seed(47405)
+
+# Now generate the random walk. The 't' index is time or trial in the walk.
+for ( t in 1:(trajLength-1) ) {
+  currentPosition = trajectory[t]
+  # Use the proposal distribution to generate a proposed jump.
+  # The shape and variance of the proposal distribution can be changed
+  # to whatever you think is appropriate for the target distribution.
+  proposedJump = rnorm( 1 , mean = 0 , sd = 0.1 )
+  # Compute the probability of accepting the proposed jump.
+  probAccept = min( 1,
+                    targetRelProb( currentPosition + proposedJump , myData )
+                    / targetRelProb( currentPosition , myData ) )
+  # Generate a random uniform value from the interval [0,1] to
+  # decide whether or not to accept the proposed jump.
+  if ( runif(1) < probAccept ) {
+    # accept the proposed jump
+    trajectory[ t+1 ] = currentPosition + proposedJump
+    # increment the accepted counter, just to monitor performance
+    if ( t > burnIn ) { nAccepted = nAccepted + 1 }
+  } else {
+    # reject the proposed jump, stay at current position
+    trajectory[ t+1 ] = currentPosition
+    # increment the rejected counter, just to monitor performance
+    if ( t > burnIn ) { nRejected = nRejected + 1 }
+  }
+}
+
+# Extract the post-burnIn portion of the trajectory.
+acceptedTraj = trajectory[ (burnIn+1) : length(trajectory) ]
+
+# End of Metropolis algorithm.
+
+#-----------------------------------------------------------------------
+# Display the posterior.
+
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+mcmcInfo = plotPost( acceptedTraj , xlim=c(0,1) , xlab=bquote(theta) )
+
+# Display rejected/accepted ratio in the plot.
+# Get the highest point and mean of the plot for subsequent text positioning:
+densMax = max( density( acceptedTraj )$y )
+meanTraj = mean( acceptedTraj )
+sdTraj = sd( acceptedTraj )
+if ( meanTraj > .5 ) {
+  xpos = 0.0 ; xadj = 0.0
+} else {
+  xpos = 1.0 ; xadj = 1.0
+}
+text( xpos , 0.75*densMax ,
+      bquote(  N[pro] * "=" * .(length(acceptedTraj)) * "  " *
+                frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
+      ) , adj=c(xadj,0)  )
+
+#------------------------------------------------------------------------
+# Evidence for model, p(D).
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+
+```
+
+### 7.3.D) While I'm sure there is a way to use JAGS here, I think it's beyond my skill level. I believe the definition of the prior has to be a stochastic node within the JAGS model, and we don't have any immediate way to specify the prior density as one of the distributions already programmed into JAGS. Below is my best shot in the short term at emulating the in-class example from the next chapter. Not sure what the problem is...
+
+```{r, funky model}
+require(R2jags)
+jm1<-function(){
+  # Likelihood
+  for(i in 1:n){
+    y[i]~dbern(theta)
+  }
+  
+  # Prior
+  tmp~dunif(0,1)
+  theta<-(cos(4*tmp*pi+1))^2 
+}
+
+n.iter=500
+n.burnin=50
+params=c('theta')
+
+y=c(rep(1,8),rep(0,4))
+data=list(y=y,n=length(y))
+jm1.fit<-jags(data=data,inits=NULL,params,model.file=jm1,n.iter=n.iter,n.burnin=n.burnin)
+```
+
+
+--------------------------------------------------------------------------------------
+
+## 7.5) Use JAGS, explore model comparison. I used model-fitting and post-processing techniques that differ somewhat from Kruschke's recommendations. I am including with the homework file two short functions I built to coerce the output from the fit jags models to data frames and to plot the chains (mcjags.R). The model with the lowest deviance should have the highest predictive power. In this case it's model 3, which makes sense given the data. Interestingly, however, the effective sample size for estimating theta is lowest in model 3.
+
+```{r 7.5,warning=FALSE,echo=FALSE,results='hide',message=FALSE}
+
+m1<-function(){
+  # Likelihood
+  for(i in 1:n){
+    y[i]~dbern(theta)
+  }
+  
+  # Prior
+  theta~dunif(0,0.4)
+}
+
+m2<-function(){
+  # Likelihood
+  for(i in 1:n){
+    y[i]~dbern(theta)
+  }
+  
+  # Prior
+  theta~dunif(0.4,0.6)
+}
+
+m3<-function(){
+  
+  # Likelihood
+  for(i in 1:n){
+    y[i]~dbern(theta)
+  }
+  
+  # Prior
+  theta~dunif(0.6,1)
+}
+
+# Let p(Heads)=p(1)
+y=c(rep(1,11),rep(0,3))
+data<-list(n=length(y),y=y)
+
+# } 
+
+n.iter=5000
+n.burnin=500
+params<-c('theta')
+
+m1.fit<-jags(data=data,inits=NULL,params,model.file=m1,n.iter=n.iter,n.burnin=n.burnin) 
+m2.fit<-jags(data=data,inits=NULL,params,model.file=m2,n.iter=n.iter,n.burnin=n.burnin)
+m3.fit<-jags(data=data,inits=NULL,params,model.file=m3,n.iter=n.iter,n.burnin=n.burnin)
+
+```
+
+### Model 1
+
+```{r m1, fig.width=10,echo=FALSE,message=FALSE,warning=FALSE}
+print(m1.fit)
+
+source('G:/documents/coursework/bayesian/functions/mcjags.R')
+m1.mcjags<-mcjags(m1.fit)
+mcjagsplot(m1.mcjags,'theta')
+mcjagsplot(m1.mcjags,'deviance')
+
+thetaSample<-m1.mcjags[m1.mcjags$parameter=='theta','value']
+
+layout( matrix( c(1,2) , nrow=1 ) )
+plot( thetaSample , 1:length(thetaSample) , type="o" ,
+      xlim=c(0,1) , xlab=bquote(theta) , ylab="Position in Chain" ,
+      cex.lab=1.25 , main="JAGS Results" , col="skyblue" )
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+histInfo = plotPost( thetaSample , xlim=c(0,1) , xlab=bquote(theta) )
+
+
+# Evidence for model, p(D).
+
+acceptedTraj<-thetaSample
+meanTraj<-mean(thetaSample)
+sdTraj<-sd(thetaSample)
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , y ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+```
+
+### Model 2
+
+```{r m2, fig.width=10,echo=FALSE,message=FALSE,warning=FALSE}
+print(m2.fit)
+m2.mcjags<-mcjags(m2.fit)
+mcjagsplot(m2.mcjags,'theta')
+mcjagsplot(m2.mcjags,'deviance')
+
+thetaSample<-m2.mcjags[m2.mcjags$parameter=='theta','value']
+
+layout( matrix( c(1,2) , nrow=1 ) )
+plot( thetaSample , 1:length(thetaSample) , type="o" ,
+      xlim=c(0,1) , xlab=bquote(theta) , ylab="Position in Chain" ,
+      cex.lab=1.25 , main="JAGS Results" , col="skyblue" )
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+histInfo = plotPost( thetaSample , xlim=c(0,1) , xlab=bquote(theta) )
+
+
+# Evidence for model, p(D).
+
+acceptedTraj<-thetaSample
+meanTraj<-mean(thetaSample)
+sdTraj<-sd(thetaSample)
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , y ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+text( xpos , 4, bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+
+```
+
+
+### Model 3
+
+```{r m3, fig.width=10,echo=FALSE,message=FALSE,warning=FALSE}
+print(m3.fit)
+m3.mcjags<-mcjags(m3.fit)
+mcjagsplot(m3.mcjags,'theta')
+mcjagsplot(m3.mcjags,'deviance')
+
+thetaSample<-m3.mcjags[m3.mcjags$parameter=='theta','value']
+
+layout( matrix( c(1,2) , nrow=1 ) )
+plot( thetaSample , 1:length(thetaSample) , type="o" ,
+      xlim=c(0,1) , xlab=bquote(theta) , ylab="Position in Chain" ,
+      cex.lab=1.25 , main="JAGS Results" , col="skyblue" )
+source("g:/documents/coursework/bayesian/functions/plotPost.R")
+histInfo = plotPost( thetaSample , xlim=c(0,1) , xlab=bquote(theta) )
+
+
+# Evidence for model, p(D).
+
+acceptedTraj<-thetaSample
+meanTraj<-mean(thetaSample)
+sdTraj<-sd(thetaSample)
+
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is Bernoulli.
+a =   meanTraj   * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
+
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are proper densities,
+# i.e., not just relative probabilities. This computation also assumes that
+# the likelihood and prior functions were defined to accept a vector argument,
+# not just a single-component scalar argument.
+wtdEvid = dbeta( acceptedTraj , a , b ) / (
+  likelihood( acceptedTraj , y ) * prior( acceptedTraj ) )
+pData = 1 / mean( wtdEvid )
+
+# Display p(D) in the graph
+text( 0.1 , 1, bquote( p(D)==.( signif(pData,3) ) ) ,
+      adj=c(xadj,0) , cex=1.5 )
+```
+
