@@ -1,0 +1,317 @@
+Doing Bayesian Data Analysis
+Chapter 8 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+## 8.1) Larry Bird's hot hand.
+
+### 8.1.A) Let SaS=success after success. Let SaF=success after failure.
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE,fig.width=10}
+require(R2jags)
+require(MCMCpack)
+require(reshape2)
+require(ggplot2)
+
+data<-list('SaS'=c(rep(1,251),rep(0,34)),
+           'nSaS'=285,
+           'SaF'=c(rep(1,48),rep(0,5)),
+           'nSaF'=53)
+
+jm1<-function(){
+  #Likelihood
+  for(i in 1:nSaS){
+    SaS[i]~dbern(SaS.theta)
+  }
+  for(i in 1:nSaF){
+    SaF[i]~dbern(SaF.theta)
+  }
+  
+  #Prior
+  SaS.theta~dbeta(30,10)
+  SaF.theta~dbeta(30,10)
+}
+
+n.iter=5000
+n.burnin=500
+params=c('SaS.theta','SaF.theta')
+jm1
+m1.fit<-jags(data=data,inits=NULL,params,model.file=jm1,n.iter=n.iter,n.burnin=n.burnin)
+m1.fit
+m1.mcmc<-as.mcmc(m1.fit)
+densityplot(m1.mcmc)
+post.df<-data.frame(as.matrix(m1.mcmc))
+post.df$Diff<-post.df$SaS.theta-post.df$SaF.theta
+Diff.HPDI<-quantile(post.df$Diff,probs=c(0.025,0.975))
+qplot(data=post.df,x=SaS.theta,y=SaF.theta,geom='density2d')
+
+diff.plot<-ggplot(data=post.df,aes(x=Diff))+geom_density(binwidth=0.1)+
+  xlab(expression(''*theta[SaS]*'-'*theta[SaF]*''))+
+  geom_segment(aes(x=max(Diff.HPDI),y=0,xend=max(Diff.HPDI),
+                   yend=density(post.df$Diff,from=max(Diff.HPDI),to=max(Diff.HPDI),n=1)$y))+
+  geom_segment(aes(x=min(Diff.HPDI),y=0,xend=min(Diff.HPDI),
+                   yend=density(post.df$Diff,from=min(Diff.HPDI),to=min(Diff.HPDI),n=1)$y))+
+  geom_text(aes(y=7.6,x=-0.0517,
+                label=paste('HPDI=[',round(min(Diff.HPDI),3),',',round(max(Diff.HPDI),3),']')))
+diff.plot
+```
+
+### 8.2.B) Doesn't look like the 'hot hand' theory holds because the HPDI of the difference between $\theta_{SaS}$ and $\theta_{SaF}$ contains zero. This is intuitive also because the posterior distributions of $\theta_{SaS}$ and $\theta_{SaF}$ are so close together.
+
+## 8.4) Tuning the Metropolis Algorithm
+
+```{r 8.4.A,message=FALSE,echo=FALSE,warning=FALSE}
+library(MASS)
+
+# Likelihood function
+
+likelihood<-function(theta){
+  z1=5
+  N1=7
+  z2=2
+  N2=7
+  likelihood=(theta[1]^z1*(1-theta[1])^(N1-z1)*theta[2]^z2*(1-theta[2])^(N2-z2))
+  return(likelihood)
+}
+
+# Prior density function
+
+prior=function(theta){
+  a1=3
+  b1=3
+  a2=3
+  b2=3
+  prior=dbeta(theta[1],a1,b1)*dbeta(theta[2],a2,b2)
+  return(prior)
+}
+
+# Relative probability of target distribution
+
+targetRelProb<-function(theta){
+  if(all(theta>=0)&all(theta<=1)){
+    targetRelProbVal=likelihood(theta)*prior(theta)
+  }
+  else{targetRelProbVal=0}
+  return(targetRelProbVal)
+}
+
+# Specify trajectory
+
+trajLength=1000
+trajectory<-matrix(0,nrow=trajLength,ncol=2)
+trajectory[1,]<-c(0.5,0.5)
+burnIn=0.1*trajLength
+nAccepted=0
+nRejected=0
+set.seed(47405)
+nDim=2
+sd1=0.005
+sd2=0.005
+covarMat<-matrix(c(sd1^2,0,0,sd2^2),nrow=nDim,ncol=nDim)
+
+# Now generate the random walk. stepIdx is the step in the walk.
+for ( stepIdx in 1:(trajLength-1) ) {
+  currentPosition = trajectory[stepIdx,]
+	# Use the proposal distribution to generate a proposed jump.
+	# The shape and variance of the proposal distribution can be changed
+	# to whatever you think is appropriate for the target distribution.
+	proposedJump = mvrnorm( n=1 , mu=rep(0,nDim), Sigma=covarMat )
+	# Compute the probability of accepting the proposed jump.
+	probAccept = min( 1,
+		targetRelProb( currentPosition + proposedJump )
+		/ targetRelProb( currentPosition ) )
+	# Generate a random uniform value from the interval [0,1] to
+	# decide whether or not to accept the proposed jump.
+	if ( runif(1) < probAccept ) {
+		# accept the proposed jump
+		trajectory[ stepIdx+1 , ] = currentPosition + proposedJump
+		# increment the accepted counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nAccepted = nAccepted + 1 }
+	} else {
+		# reject the proposed jump, stay at current position
+		trajectory[ stepIdx+1 , ] = currentPosition
+		# increment the rejected counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nRejected = nRejected + 1 }
+	}
+}
+
+acceptedTraj=trajectory[ (burnIn+1):dim(trajectory)[1],]
+meanTraj=apply(acceptedTraj,2,mean)
+sdTraj=apply(acceptedTraj,2,sd)
+
+par( pty="s" ) # makes plots in square axes.
+plot( acceptedTraj , type = "o" , xlim = c(0,1) , xlab = bquote(theta[1]) ,
+      ylim = c(0,1) , ylab = bquote(theta[2]) , col="skyblue" )
+# Display means and rejected/accepted ratio in plot.
+if ( meanTraj[1] > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+if ( meanTraj[2] > .5 ) { ypos = 0.0 ; yadj = 0.0
+} else { ypos = 1.0 ; yadj = 1.0 }
+text( xpos , ypos ,  bquote(
+	"M=" * .(signif(meanTraj[1],3)) * "," * .(signif(meanTraj[2],3))
+	* "; " * N[pro] * "=" * .(dim(acceptedTraj)[1])
+	* ", " * frac(N[acc],N[pro]) * "=" 
+	* .(signif(nAccepted/dim(acceptedTraj)[1],3))
+	) , adj=c(xadj,yadj) , cex=1.5  )
+
+# Evidence for model, p(D).
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is binomial.
+a =   meanTraj * ( (meanTraj*(1-meanTraj)/sdTraj^2) - rep(1,nDim) )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - rep(1,nDim) )
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are properly normalized,
+# i.e., not just relative probabilities. 
+wtd_evid = rep( 0 , dim(acceptedTraj)[1] )
+for ( idx in 1 : dim(acceptedTraj)[1] ) {
+  wtd_evid[idx] = ( dbeta( acceptedTraj[idx,1],a[1],b[1] )
+		* dbeta( acceptedTraj[idx,2],a[2],b[2] ) /
+		( likelihood(acceptedTraj[idx,]) * prior(acceptedTraj[idx,]) ) )
+}
+pdata = 1 / mean( wtd_evid )
+# Display p(D) in the graph
+text( xpos , ypos+(.12*(-1)^(ypos)) , bquote( "p(D) = " * .(signif(pdata,3)) ) ,
+	  adj=c(xadj,yadj) , cex=1.5 )
+
+# Estimate highest density region by evaluating posterior at each point.
+npts = dim( acceptedTraj )[1] ; postProb = rep( 0 , npts )
+for ( ptIdx in 1:npts ) {
+    postProb[ptIdx] = targetRelProb( acceptedTraj[ptIdx,] )
+}
+
+# Determine the level at which credmass points are above:
+credmass = 0.95
+waterline = quantile( postProb , probs=c(1-credmass) )
+```
+
+### 8.4.1) The standard deviation of the jump is very small so there is high correlation of all the accepted values. In other words, such a small standard deviation for tuning results in the exploration of only a small portion of the parameter space
+
+```{r 8.4.B,message=FALSE,echo=FALSE,warning=FALSE}
+# Likelihood function
+
+likelihood<-function(theta){
+  z1=5
+  N1=7
+  z2=2
+  N2=7
+  likelihood=(theta[1]^z1*(1-theta[1])^(N1-z1)*theta[2]^z2*(1-theta[2])^(N2-z2))
+  return(likelihood)
+}
+
+# Prior density function
+
+prior=function(theta){
+  a1=3
+  b1=3
+  a2=3
+  b2=3
+  prior=dbeta(theta[1],a1,b1)*dbeta(theta[2],a2,b2)
+  return(prior)
+}
+
+# Relative probability of target distribution
+
+targetRelProb<-function(theta){
+  if(all(theta>=0)&all(theta<=1)){
+    targetRelProbVal=likelihood(theta)*prior(theta)
+  }
+  else{targetRelProbVal=0}
+  return(targetRelProbVal)
+}
+
+# Specify trajectory
+
+trajLength=1000
+trajectory<-matrix(0,nrow=trajLength,ncol=2)
+trajectory[1,]<-c(0.5,0.5)
+burnIn=0.1*trajLength
+nAccepted=0
+nRejected=0
+set.seed(47405)
+nDim=2
+sd1=5
+sd2=5
+covarMat<-matrix(c(sd1^2,0,0,sd2^2),nrow=nDim,ncol=nDim)
+
+# Now generate the random walk. stepIdx is the step in the walk.
+for ( stepIdx in 1:(trajLength-1) ) {
+  currentPosition = trajectory[stepIdx,]
+  # Use the proposal distribution to generate a proposed jump.
+	# The shape and variance of the proposal distribution can be changed
+	# to whatever you think is appropriate for the target distribution.
+	proposedJump = mvrnorm( n=1 , mu=rep(0,nDim), Sigma=covarMat )
+	# Compute the probability of accepting the proposed jump.
+	probAccept = min( 1,
+		targetRelProb( currentPosition + proposedJump )
+		/ targetRelProb( currentPosition ) )
+	# Generate a random uniform value from the interval [0,1] to
+	# decide whether or not to accept the proposed jump.
+	if ( runif(1) < probAccept ) {
+		# accept the proposed jump
+		trajectory[ stepIdx+1 , ] = currentPosition + proposedJump
+		# increment the accepted counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nAccepted = nAccepted + 1 }
+	} else {
+		# reject the proposed jump, stay at current position
+		trajectory[ stepIdx+1 , ] = currentPosition
+		# increment the rejected counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nRejected = nRejected + 1 }
+	}
+}
+
+acceptedTraj=trajectory[ (burnIn+1):dim(trajectory)[1],]
+meanTraj=apply(acceptedTraj,2,mean)
+sdTraj=apply(acceptedTraj,2,sd)
+
+par( pty="s" ) # makes plots in square axes.
+plot( acceptedTraj , type = "o" , xlim = c(0,1) , xlab = bquote(theta[1]) ,
+      ylim = c(0,1) , ylab = bquote(theta[2]) , col="skyblue" )
+# Display means and rejected/accepted ratio in plot.
+if ( meanTraj[1] > .5 ) { xpos = 0.0 ; xadj = 0.0
+} else { xpos = 1.0 ; xadj = 1.0 }
+if ( meanTraj[2] > .5 ) { ypos = 0.0 ; yadj = 0.0
+} else { ypos = 1.0 ; yadj = 1.0 }
+text( xpos , ypos ,  bquote(
+	"M=" * .(signif(meanTraj[1],3)) * "," * .(signif(meanTraj[2],3))
+	* "; " * N[pro] * "=" * .(dim(acceptedTraj)[1])
+	* ", " * frac(N[acc],N[pro]) * "=" 
+	* .(signif(nAccepted/dim(acceptedTraj)[1],3))
+	) , adj=c(xadj,yadj) , cex=1.5  )
+
+# Evidence for model, p(D).
+# Compute a,b parameters for beta distribution that has the same mean
+# and stdev as the sample from the posterior. This is a useful choice
+# when the likelihood function is binomial.
+a =   meanTraj * ( (meanTraj*(1-meanTraj)/sdTraj^2) - rep(1,nDim) )
+b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - rep(1,nDim) )
+# For every theta value in the posterior sample, compute 
+# dbeta(theta,a,b) / likelihood(theta)*prior(theta)
+# This computation assumes that likelihood and prior are properly normalized,
+# i.e., not just relative probabilities. 
+wtd_evid = rep( 0 , dim(acceptedTraj)[1] )
+for ( idx in 1 : dim(acceptedTraj)[1] ) {
+  wtd_evid[idx] = ( dbeta( acceptedTraj[idx,1],a[1],b[1] )
+		* dbeta( acceptedTraj[idx,2],a[2],b[2] ) /
+		( likelihood(acceptedTraj[idx,]) * prior(acceptedTraj[idx,]) ) )
+}
+pdata = 1 / mean( wtd_evid )
+# Display p(D) in the graph
+text( xpos , ypos+(.12*(-1)^(ypos)) , bquote( "p(D) = " * .(signif(pdata,3)) ) ,
+	  adj=c(xadj,yadj) , cex=1.5 )
+
+# Estimate highest density region by evaluating posterior at each point.
+npts = dim( acceptedTraj )[1] ; postProb = rep( 0 , npts )
+for ( ptIdx in 1:npts ) {
+    postProb[ptIdx] = targetRelProb( acceptedTraj[ptIdx,] )
+}
+
+```
+
+### 8.4.B) A high standard deviation in the proposal distribution leads to an extremely low acceptance rate, so almost none of the parameter space is filled. Unlike in 8.4.A, when jumps were too small such that the space is filled inefficiently, in this case it is because all proposed jumps move too far out of the parameter space such that almost none are accepted.
