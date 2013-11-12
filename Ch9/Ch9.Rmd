@@ -74,7 +74,51 @@ n.iter=50000
 params=c('mu','kappa','theta','a','b')
 
 m1.fit <- jags(data=data, inits=NULL, params, model.file=jm1, n.iter=n.iter, n.burnin=n.burnin)
-post.mat <-
+post.mat <- as.matrix(as.mcmc(m1.fit))
+
+head(post.mat)
+
+post.diff <- melt(data.frame('mu1-mu2'= post.mat[,11] - post.mat[,12], 
+                        'mu3-mu4'=post.mat[,13] - post.mat[,14]))
+head(post.diff)
+
+q.lower <- c(quantile(post.diff[post.diff$variable=='mu1.mu2',2], 0.025), 
+             quantile(post.diff[post.diff$variable=='mu3.mu4',2], 0.025))
+
+d.lower <- c(density(post.diff[post.diff$variable=='mu1.mu2', 2], 
+                     from=q.lower[1], to=q.lower[1], n=1)$y,
+             density(post.diff[post.diff$variable=='mu3.mu4', 2],
+                     from=q.lower[2], to=q.lower[2], n=1)$y)
+
+q.upper <- c(quantile(post.diff[post.diff$variable=='mu1.mu2',2], 0.975), 
+             quantile(post.diff[post.diff$variable=='mu3.mu4',2], 0.975))
+
+d.upper <- c(density(post.diff[post.diff$variable=='mu1.mu2', 2], 
+                     from=q.upper[1], to=q.upper[1], n=1)$y,
+             density(post.diff[post.diff$variable=='mu3.mu4', 2],
+                     from=q.upper[2], to=q.upper[2], n=1)$y)
+
+post.diff$variable<-factor(post.diff$variable, 
+                           labels = c("mu[1] - mu[2]", 
+                                      "mu[3] - mu[4]"))
+
+segs <- data.frame('variable'=rep(levels(post.diff$variable),2), 
+                       'x'=c(q.lower, q.upper),
+                       'y'=rep(0,4),
+                       'xend'=c(q.lower,q.upper),
+                       'yend'=c(d.lower,d.upper))
+
+HPDS <- data.frame('variable'=levels(segs$variable),
+                   'lab'= paste(round(q.lower,3),round(q.upper,3)))
+                   
+
+HPDS
+
+diff.plot <- ggplot(post.diff, aes(x=value)) + geom_density() + 
+  geom_segment(data=segs, aes(x=x, y=y, xend=xend, yend=yend)) 
+#  geom_text(data=HPDs, aes(y=17, x=0.25,label='lab'), parse=T)
+
+diff.plot+ facet_grid(~variable, labeller=label_parsed)
 ```
 
 
