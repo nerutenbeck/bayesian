@@ -1,0 +1,81 @@
+Doing Bayesian Data Analysis
+Chapter 9 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+## 9.2) Change the filtration-Condensation Model
+
+```{r settings, message=FALSE, warning=FALSE, echo=FALSE}
+require(ggplot2)
+require(reshape2)
+require(plyr)
+require(R2jags)
+opts_knir$set(message=FALSE, warning=FALSE, echo=FALSE)
+```
+
+### 9.2.A.1 The model
+
+```{r model, echo=TRUE}
+# THE MODEL.
+
+jm1<- function(){
+   for ( subjIdx in 1:nSubj ) {
+      # Likelihood:
+      z[subjIdx] ~ dbin( theta[subjIdx] , N[subjIdx] )
+      # Prior on theta: Notice nested indexing.
+      theta[subjIdx] ~ dbeta( a[cond[subjIdx]] , b[cond[subjIdx]] )
+   }
+   for ( condIdx in 1:nCond ) {
+      a[condIdx] <- mu[condIdx] * kappa
+      b[condIdx] <- (1-mu[condIdx]) * kappa
+      # Hyperprior on mu and kappa:
+      mu[condIdx] ~ dbeta( Amu , Bmu )
+   }
+   kappa ~ dgamma( Skappa , Rkappa )
+   # Constants for hyperprior:
+   Amu <- 1
+   Bmu <- 1
+   Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
+   Rkappa <- meanGamma/pow(sdGamma,2)
+   meanGamma <- 10
+   sdGamma <- 10
+}
+```
+
+
+```{r fit model}
+# THE DATA.
+
+# For each subject, specify the condition s/he was in,
+# the number of trials s/he experienced, and the number correct.
+# (These lines intentionally exceed the margins so that they don't take up
+# excessive space on the printed page.)
+cond = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)
+N = c(64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64)
+z = c(45,63,58,64,58,63,51,60,59,47,63,61,60,51,59,45,61,59,60,58,63,56,63,64,64,60,64,62,49,64,64,58,64,52,64,64,64,62,64,61,59,59,55,62,51,58,55,54,59,57,58,60,54,42,59,57,59,53,53,42,59,57,29,36,51,64,60,54,54,38,61,60,61,60,62,55,38,43,58,60,44,44,32,56,43,36,38,48,32,40,40,34,45,42,41,32,48,36,29,37,53,55,50,47,46,44,50,56,58,42,58,54,57,54,51,49,52,51,49,51,46,46,42,49,46,56,42,53,55,51,55,49,53,55,40,46,56,47,54,54,42,34,35,41,48,46,39,55,30,49,27,51,41,36,45,41,53,32,43,33)
+nSubj = length(cond)
+nCond = length(unique(cond))
+
+data = list(
+ nCond = nCond ,
+ nSubj = nSubj ,
+ cond = cond ,
+ N = N ,
+ z = z
+)
+
+n.burnin=2000
+n.iter=50000
+params=c('mu','kappa','theta','a','b')
+
+m1.fit <- jags(data=data, inits=NULL, params, model.file=jm1, n.iter=n.iter, n.burnin=n.burnin)
+post.mat <-
+```
+
+
+### 9.A.
