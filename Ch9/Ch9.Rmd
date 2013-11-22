@@ -8,19 +8,22 @@ Chapter 9 Homework
 
 --------------------------------------------------------
 
-## 9.2) Change the filtration-Condensation Model
-
-```{r settings, message=FALSE, warning=FALSE, echo=FALSE}
+```{r settings, message=FALSE, warning=FALSE, echo=FALSE, }
+require(knitr)
 require(ggplot2)
 require(reshape2)
 require(plyr)
 require(R2jags)
-opts_knir$set(message=FALSE, warning=FALSE, echo=FALSE)
+opts_chunk$set(message=FALSE, warning=FALSE, echo=FALSE, fig.width=11)
 ```
 
-### 9.2.A.1 The model
+## 9.2 Assumptions regarding cross-group constraints
 
-```{r model, echo=TRUE}
+### 9.2.A Differences in distributions of $\kappa$
+
+#### 9.2.A.1 The model
+
+```{r model1, echo=TRUE}
 # THE MODEL.
 
 jm1<- function(){
@@ -33,13 +36,13 @@ jm1<- function(){
    for ( condIdx in 1:nCond ) {
       a[condIdx] <- mu[condIdx] * kappa
       b[condIdx] <- (1-mu[condIdx]) * kappa
-      # Hyperprior on mu and kappa:
+      # Hyperprior on mu
       mu[condIdx] ~ dbeta( Amu , Bmu )
    }
-   kappa ~ dgamma( Skappa , Rkappa )
    # Constants for hyperprior:
    Amu <- 1
    Bmu <- 1
+   kappa ~ dgamma( Skappa , Rkappa )
    Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
    Rkappa <- meanGamma/pow(sdGamma,2)
    meanGamma <- 10
@@ -47,14 +50,10 @@ jm1<- function(){
 }
 ```
 
+#### 9.2.A.2 The posterior distribution. As a side note, I wonder how important specifying initialization is for these models. I continue to get good results just letting JAGS pick starting values.
 
-```{r fit model}
-# THE DATA.
+```{r fit1, cache=TRUE}
 
-# For each subject, specify the condition s/he was in,
-# the number of trials s/he experienced, and the number correct.
-# (These lines intentionally exceed the margins so that they don't take up
-# excessive space on the printed page.)
 cond = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)
 N = c(64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64)
 z = c(45,63,58,64,58,63,51,60,59,47,63,61,60,51,59,45,61,59,60,58,63,56,63,64,64,60,64,62,49,64,64,58,64,52,64,64,64,62,64,61,59,59,55,62,51,58,55,54,59,57,58,60,54,42,59,57,59,53,53,42,59,57,29,36,51,64,60,54,54,38,61,60,61,60,62,55,38,43,58,60,44,44,32,56,43,36,38,48,32,40,40,34,45,42,41,32,48,36,29,37,53,55,50,47,46,44,50,56,58,42,58,54,57,54,51,49,52,51,49,51,46,46,42,49,46,56,42,53,55,51,55,49,53,55,40,46,56,47,54,54,42,34,35,41,48,46,39,55,30,49,27,51,41,36,45,41,53,32,43,33)
@@ -69,18 +68,22 @@ data = list(
  z = z
 )
 
-n.burnin=2000
-n.iter=50000
+n.burnin=500
+n.iter=5000
 params=c('mu','kappa','theta','a','b')
 
-m1.fit <- jags(data=data, inits=NULL, params, model.file=jm1, n.iter=n.iter, n.burnin=n.burnin)
+sqzData = .01+.98*data$z/data$N
+mu = aggregate( sqzData , list(data$cond) , "mean" )[,"x"]
+sd = aggregate( sqzData , list(data$cond) , "sd" )[,"x"]
+kappa = mean(mu)*(1-mean(mu))/mean(sd)^2 - 1
+inits = function(){list( theta = sqzData , mu = mu , kappa = kappa )
+}
+m1.fit <- jags(data=data, inits=inits, params, model.file=jm1, 
+               n.iter=n.iter, n.burnin=n.burnin)
 post.mat <- as.matrix(as.mcmc(m1.fit))
-
-head(post.mat)
 
 post.diff <- melt(data.frame('mu1-mu2'= post.mat[,11] - post.mat[,12], 
                         'mu3-mu4'=post.mat[,13] - post.mat[,14]))
-head(post.diff)
 
 q.lower <- c(quantile(post.diff[post.diff$variable=='mu1.mu2',2], 0.025), 
              quantile(post.diff[post.diff$variable=='mu3.mu4',2], 0.025))
@@ -108,18 +111,173 @@ segs <- data.frame('variable'=rep(levels(post.diff$variable),2),
                        'xend'=c(q.lower,q.upper),
                        'yend'=c(d.lower,d.upper))
 
-HPDS <- data.frame('variable'=levels(segs$variable),
-                   'lab'= paste(round(q.lower,3),round(q.upper,3)))
-                   
-
-HPDS
+labs <- data.frame('variable'=levels(segs$variable),
+                   'HPDI'= paste(round(q.lower,3), ",", round(q.upper,3)),
+                   'mean' = c(mean(post.diff[post.diff$variable=='mu[1] - mu[2]',2]),
+                              mean(post.diff[post.diff$variable=='mu[3] - mu[4]',2])))
 
 diff.plot <- ggplot(post.diff, aes(x=value)) + geom_density() + 
-  geom_segment(data=segs, aes(x=x, y=y, xend=xend, yend=yend)) 
-#  geom_text(data=HPDs, aes(y=17, x=0.25,label='lab'), parse=T)
+  geom_segment(data=segs, aes(x=x, y=y, xend=xend, yend=yend)) +
+  geom_text(data=labs, aes(y=17, x=-0.05, label=paste("HPDI=[", HPDI, "]", sep=""))) +
+  geom_text(data=labs, aes(y=18, x=-0.05, label=paste("Mean=", round(mean, 3), sep="")))
 
 diff.plot+ facet_grid(~variable, labeller=label_parsed)
 ```
 
 
-### 9.A.
+#### 9.2.A.3 The graphs look different because of the differences in assumptions regarding $\kappa$, and the different relationships between $\kappa$ and $\mu_i$ in each model. In the first filtration/condensation model represented in the textbook, the $a$ and $b$ parameters for each $\mu_i$ vary more widely because each $\mu_i$ has dependency on a unique $\kappa_i$\, all of which come from the same distribution, the shape of which is estimated from the data. In the second model by contrast, once defined from the underlying $\Gamma (10,0.1)$ distribution the value of $\kappa$ is identical for each $\mu_i$ . In other words, within-group variability around each $\mu_i$ is assumed to be the same in all cases. Wide distributions of $\mu_i$ get shrunk toward the mean, and narrow distributions get expanded. The distribution of each $\mu_i$ is therefore identically constrained around the mean, and different amounts of shrinkage between the two models results in this case in greater differences between $\mu_1$ and $\mu_2$.
+
+### 9.2.B Change structure of $\kappa$ again to reflect a higher level of dependency
+
+#### 9.2.B.1 The model
+
+```{r model2, echo=TRUE}
+# THE MODEL.
+
+jm2<- function(){
+   for ( subjIdx in 1:nSubj ) {
+      # Likelihood:
+      z[subjIdx] ~ dbin( theta[subjIdx] , N[subjIdx] )
+      # Prior on theta: Notice nested indexing.
+      theta[subjIdx] ~ dbeta( a[cond[subjIdx]] , b[cond[subjIdx]] )
+   }
+   for ( condIdx in 1:nCond ) {
+      a[condIdx] <- mu[condIdx] * kappa[condIdx]
+      b[condIdx] <- (1-mu[condIdx]) * kappa[condIdx]
+      # Hyperpriors on mu and kappa
+      mu[condIdx] ~ dbeta( Amu , Bmu )
+      kappa[condIdx] ~ dgamma( Skappa , Rkappa )
+   }
+   # Constants for hyperprior:
+   Amu <- 1
+   Bmu <- 1
+   Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
+   Rkappa <- meanGamma/pow(sdGamma,2)
+   meanGamma ~ dunif(0.01, 30)
+   sdGamma ~ dunif(0.01, 30)
+}
+```
+
+
+#### 9.2.B.2 The posterior distribution
+
+```{r fit2, cache=TRUE}
+
+### Initialize ###
+
+cond = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)
+N = c(64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64)
+z = c(45,63,58,64,58,63,51,60,59,47,63,61,60,51,59,45,61,59,60,58,63,56,63,64,64,60,64,62,49,64,64,58,64,52,64,64,64,62,64,61,59,59,55,62,51,58,55,54,59,57,58,60,54,42,59,57,59,53,53,42,59,57,29,36,51,64,60,54,54,38,61,60,61,60,62,55,38,43,58,60,44,44,32,56,43,36,38,48,32,40,40,34,45,42,41,32,48,36,29,37,53,55,50,47,46,44,50,56,58,42,58,54,57,54,51,49,52,51,49,51,46,46,42,49,46,56,42,53,55,51,55,49,53,55,40,46,56,47,54,54,42,34,35,41,48,46,39,55,30,49,27,51,41,36,45,41,53,32,43,33)
+nSubj = length(cond)
+nCond = length(unique(cond))
+
+data = list(
+ nCond = nCond ,
+ nSubj = nSubj ,
+ cond = cond ,
+ N = N ,
+ z = z
+)
+
+n.chains=3
+n.burnin=500
+n.iter=5000
+params=c('mu','kappa','theta','a','b')
+sqzData = .01+.98*data$z/data$N
+mu = aggregate( sqzData , list(data$cond) , "mean" )[,"x"]
+sd = aggregate( sqzData , list(data$cond) , "sd" )[,"x"]
+kappa = mu*(1-mu)/sd^2 - 1
+meanGamma <- mean(kappa)
+sdGamma <-sd(kappa)
+inits = function(){
+  list( theta = sqzData , mu = mu , kappa = kappa , meanGamma=meanGamma, sdGamma=sdGamma)
+}
+
+### Fit the model ###
+
+m2.fit <- jags(data=data, inits=inits, parameters.to.save=params, model.file=jm2, 
+               n.iter=n.iter, n.burnin=n.burnin)
+post.mat <- as.matrix(as.mcmc(m2.fit))
+
+post.diff <- melt(data.frame('mu1-mu2'= post.mat[,14] - post.mat[,15], 
+                        'mu3-mu4'=post.mat[,16] - post.mat[,17]))
+
+q.lower <- c(quantile(post.diff[post.diff$variable=='mu1.mu2',2], 0.025), 
+             quantile(post.diff[post.diff$variable=='mu3.mu4',2], 0.025))
+
+d.lower <- c(density(post.diff[post.diff$variable=='mu1.mu2', 2], 
+                     from=q.lower[1], to=q.lower[1], n=1)$y,
+             density(post.diff[post.diff$variable=='mu3.mu4', 2],
+                     from=q.lower[2], to=q.lower[2], n=1)$y)
+
+q.upper <- c(quantile(post.diff[post.diff$variable=='mu1.mu2',2], 0.975), 
+             quantile(post.diff[post.diff$variable=='mu3.mu4',2], 0.975))
+
+d.upper <- c(density(post.diff[post.diff$variable=='mu1.mu2', 2], 
+                     from=q.upper[1], to=q.upper[1], n=1)$y,
+             density(post.diff[post.diff$variable=='mu3.mu4', 2],
+                     from=q.upper[2], to=q.upper[2], n=1)$y)
+
+post.diff$variable<-factor(post.diff$variable, 
+                           labels = c("mu[1] - mu[2]", 
+                                      "mu[3] - mu[4]"))
+
+segs <- data.frame('variable'=rep(levels(post.diff$variable),2), 
+                       'x'=c(q.lower, q.upper),
+                       'y'=rep(0,4),
+                       'xend'=c(q.lower,q.upper),
+                       'yend'=c(d.lower,d.upper))
+
+labs <- data.frame('variable'=levels(segs$variable),
+                   'HPDI'= paste(round(q.lower,3), ",", round(q.upper,3)),
+                   'mean' = c(mean(post.diff[post.diff$variable=='mu[1] - mu[2]',2]),
+                              mean(post.diff[post.diff$variable=='mu[3] - mu[4]',2])))
+
+diff.plot <- ggplot(post.diff, aes(x=value)) + geom_density() + 
+  geom_segment(data=segs, aes(x=x, y=y, xend=xend, yend=yend)) +
+  geom_text(data=labs, aes(y=17, x=-0.04, label=paste("HPDI=[", HPDI, "]", sep=""))) +
+  geom_text(data=labs, aes(y=18, x=-0.04, label=paste("Mean=", round(mean, 3), sep="")))
+
+diff.plot+ facet_grid(~variable, labeller=label_parsed)
+```
+
+#### 9.2.B.3 The distributions do not very a whole lot. That said, in this model the shape of the distribution for each $\kappa_i$ is unique but the distribution of possible parameter values defining each underlying Gamma distribution is the same. The distribution of each $\mu_i$ will therefore be dependent on its own corresponding $\kappa_i$, but the parameters defining each $\kappa_i$ are similarly constrained. This causes a sort of middle ground in the flexibility of the $\mu_i$ distributions - there is shrinkage because of the underlying dependencies represented by the identical constraints on parameters of the Gamma distributions defining $\kappa_i$, but not as much as when $\kappa$ was identical in all cases.
+
+## 9.3 Burn-in, thinning, and autocorrelation
+
+#### These plots show that values for kappa are highly autocorrelated without thinning, and that the chains do not mix well during the first 800 or so iterations. This highlights the importance of thinning to reduce the effect of autocorrelation in the posterior distribution, as well as the importance of the burnin period to select values after mixing has occurred.
+
+```{r m3, }
+jm3<- function(){
+   for ( subjIdx in 1:nSubj ) {
+      # Likelihood:
+      z[subjIdx] ~ dbin( theta[subjIdx] , N[subjIdx] )
+      # Prior on theta: Notice nested indexing.
+      theta[subjIdx] ~ dbeta( a[cond[subjIdx]] , b[cond[subjIdx]] )
+   }
+   for ( condIdx in 1:nCond ) {
+      a[condIdx] <- mu[condIdx] * kappa[condIdx]
+      b[condIdx] <- (1-mu[condIdx]) * kappa[condIdx]
+      # Hyperpriors on mu and kappa
+      mu[condIdx] ~ dbeta( Amu , Bmu )
+      kappa[condIdx] ~ dgamma( Skappa , Rkappa )
+   }
+   # Constants for hyperprior:
+   Amu <- 1
+   Bmu <- 1
+   Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
+   Rkappa <- meanGamma/pow(sdGamma,2)
+   meanGamma ~ dunif(0.01, 30)
+   sdGamma ~ dunif(0.01, 30)
+}
+
+n.burnin=0
+n.thin=1
+n.iter=800
+params=c('kappa')
+
+m3.fit <- jags(data=data, inits=NULL, params, model.file=jm3, n.iter=n.iter, n.thin=n.thin, n.burnin=n.burnin, DIC=F)
+plot(as.mcmc(m3.fit))
+densityplot(as.mcmc(m3.fit))
+
+```

@@ -1,0 +1,384 @@
+Doing Bayesian Data Analysis
+Chapter 10 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+```{r settings, message=FALSE, warning=FALSE, echo=FALSE, }
+require(knitr)
+require(ggplot2)
+require(reshape2)
+require(plyr)
+require(R2jags)
+opts_chunk$set(message=FALSE, warning=FALSE, echo=FALSE, fig.width=11)
+```
+
+## 10.2) Toy model
+
+### 10.2.A) Priors: $\nu \sim N(\mu=0, \tau=0.1); \eta \sim \gamma(\alpha=0.1, \beta=0.1)$ Traceplot for model index is shown below.
+
+```{r toy1}
+
+data <- list(y = c(rep(1,8), rep(0,22)),
+             n = 30)
+
+toy <- function(){
+  # Likelihood
+  for (i in 1:n){
+    y[i] ~ dbern(theta)
+  }
+  # Prior
+  theta <- ( (2 - modIdx) * 1/(1+exp(-nu) ) 
+             + (modIdx-1) * exp(-eta))
+  nu ~ dnorm (mu, tau)
+  eta ~ dgamma (alpha, beta)
+  modIdx ~ dcat(modProb[])
+  mu <- 0
+  tau <- 0.1
+  alpha <- 0.1
+  beta <- 0.1
+  
+  # Hyperprior on model index
+  modProb[1] <- 0.5
+  modProb[2] <- 0.5
+}
+
+
+n.iter <- 1000
+n.burnin <- 100
+n.chains <- 1
+n.thin <- 1
+params <- c('theta', 'nu', 'eta', 'modIdx')
+
+toy.fit <- jags(model.file=toy, data=data, parameters.to.save=params, n.iter=n.iter, n.burnin=n.burnin, n.thin=n.thin, n.chains=1)
+traceplot(toy.fit, var='modIdx', ask=F)
+
+toy.mcmc <- as.mcmc(toy.fit)
+
+p1 <- sum(toy.mcmc[,'modIdx']==1)/900
+p2 <- 1-p1
+
+
+```
+
+### Probabilities of the models are $p(mod1) = `r p1`$ and $p(mod2) = `r p2`$
+
+### 10.2.B) Priors: $\nu \sim N(\mu=1, \tau=1); \eta \sim \gamma(\alpha=1, \beta=1)$ Traceplot for model index is shown below.
+
+```{r toy2}
+
+toy2 <- function(){
+  # Likelihood
+  for (i in 1:n){
+    y[i] ~ dbern(theta)
+  }
+  # Prior
+  theta <- ( (2 - modIdx) * 1/(1+exp(-nu) ) 
+             + (modIdx-1) * exp(-eta))
+  nu ~ dnorm (mu, tau)
+  eta ~ dgamma (alpha, beta)
+  modIdx ~ dcat(modProb[])
+  mu <- 1
+  tau <- 1
+  alpha <- 1
+  beta <- 1
+  
+  # Hyperprior on model index
+  modProb[1] <- 0.5
+  modProb[2] <- 0.5
+}
+
+toy.fit2 <- jags(model.file=toy2,
+                 data=data,
+                 parameters.to.save=params,
+                 n.iter=n.iter,
+                 n.burnin=n.burnin,
+                 n.thin=n.thin,
+                 n.chains=1)
+
+traceplot(toy.fit2, var='modIdx', ask=F)
+
+toy2.mcmc <- as.mcmc(toy.fit2)
+
+p1 <- sum(toy2.mcmc[,'modIdx']==1)/900
+p1 <-
+
+p2 <- 1-p1
+```
+
+### Probabilities of the models are $p(mod1) = `r p1`$ and $p(mod2) = `r p2`$. Based on these model probabilities, model 2 is preferred.
+
+### 10.2.C) The choice of the priors impacts the posterior probabilities of the models because the choice of prior determines in part how often each model gets visited by the Gibbs sampler over the length of the chain.
+
+### 10.2.D) Kruschke suggests a general 'proto-prior'. From my perspective you might as well use a uniform prior over the entire range of possible parameter values. This ensures that estimates are generated from both models, then you can update future iterations of model fitting with new priors. 
+
+## 10.3) Pseudopriors approach
+
+```{r pseudopriors, results='hide'}
+load('G:/documents/coursework/bayesian/functions/Kruschke1996CSdatsum.Rdata')
+
+data <- list(z = nCorrOfSubj,
+             n = nTrlOfSubj,
+             cond = CondOfSubj,
+             nSubj = length(CondOfSubj),
+             nCond = length(unique(CondOfSubj)))
+
+jm1 <- function(){
+  
+  # Likelihood
+  for (i in 1:nSubj){
+    z[i] ~ dbin(theta[i], n[i])
+    theta[i] ~ dbeta(aBeta[cond[i]], bBeta[cond[i]])
+  }
+  
+  # Prior
+  for (j in 1:nCond){
+      aBeta[j] <- mu[j]     * (kappa[j]*equals(mdlIdx,1)+kappa0*equals(mdlIdx,2))
+      bBeta[j] <- (1-mu[j]) * (kappa[j]*equals(mdlIdx,1)+kappa0*equals(mdlIdx,2))
+  }
+
+  # Hyperprior on mu and kappa:
+  kappa0 ~ dgamma( shk0[mdlIdx] , rak0[mdlIdx] )
+  for ( j in 1:nCond ) {
+    mu[j] ~ dbeta( aHyperbeta , bHyperbeta )
+    kappa[j] ~ dgamma( shk[j,mdlIdx] , rak[j,mdlIdx] )
+  }
+  
+  # Constants for hyperprior:
+  aHyperbeta <- 1
+  bHyperbeta <- 1
+  
+  # Actual priors:
+  shP <- 1.0 # shape for prior
+  raP <- 0.1 # rate for prior
+  # shape, rate kappa0[ model ]
+  shk0[2] <- shP
+  rak0[2] <- raP
+  # shape kappa[ condition , model ]
+  shk[1,1] <- shP
+  shk[2,1] <- shP
+  shk[3,1] <- shP
+  shk[4,1] <- shP
+  # rate kappa[ condition , model ]
+  rak[1,1] <- raP
+  rak[2,1] <- raP
+  rak[3,1] <- raP
+  rak[4,1] <- raP
+  
+  # Pseudo priors:
+  # shape, rate kappa0[ model ]
+  shk0[1] <- 54.0
+  rak0[1] <- 4.35
+  # shape kappa[ condition , model ]
+  shk[1,2] <- 11.8
+  shk[2,2] <- 11.9
+  shk[3,2] <- 13.6
+  shk[4,2] <- 12.6
+  # rate kappa[ condition , model ]
+  rak[1,2] <- 1.34
+  rak[2,2] <- 1.11
+  rak[3,2] <- 0.903
+  rak[4,2] <- 0.748
+  
+  # Hyperprior on model index:
+  mdlIdx ~ dcat( modelProb[] )
+  modelProb[1] <- 0.003
+  modelProb[2] <- 0.997
+}
+
+params = c("mu","kappa","kappa0","theta","mdlIdx")
+n.burnin = 1000
+n.chains = 1                 
+n.iter = 10000         
+n.thin = 1 
+
+jm1.fit <- jags(model.file=jm1,
+                data=data,
+                n.chains=n.chains,
+                n.burnin=n.burnin,
+                n.iter=n.iter,
+                n.thin=n.thin,
+                parameters.to.save=params)
+
+jm1.fit
+
+jm1.mcmc <- as.mcmc(jm1.fit)
+
+head(jm1.mcmc)
+
+kappaPost <- data.frame("condition" = c(0:4), "mean"=NA, "sd"=NA)
+kappaPost[1,2] <- mean(jm1.mcmc[,'kappa0'])
+kappaPost[1,3] <- sd(jm1.mcmc[,'kappa0'])
+for (i in 2:nrow(kappaPost)){
+  kappaPost[i,2] <-mean(jm1.mcmc[, i])
+  kappaPost[i,3] <-sd(jm1.mcmc[, i])
+}
+
+kappaPost
+
+mean(jm1.mcmc[,'kappa[1]'])
+mean(jm1.mcmc[,4])
+kappaPost
+
+
+```
+
+### 10.3.A) Show the modified model
+
+```{r jm2, echo=TRUE}
+jm2 <- function(){
+  
+  # Likelihood
+  for (i in 1:nSubj){
+    z[i] ~ dbin(theta[i], n[i])
+    theta[i] ~ dbeta(aBeta[cond[i]], bBeta[cond[i]])
+  }
+  
+  # Prior
+  for (j in 1:nCond){
+      aBeta[j] <- mu[j]     * (kappa[j]*equals(mdlIdx,1)+kappa0*equals(mdlIdx,2))
+      bBeta[j] <- (1-mu[j]) * (kappa[j]*equals(mdlIdx,1)+kappa0*equals(mdlIdx,2))
+  }
+
+  # Hyperprior on mu and kappa:
+  kappa0 ~ dgamma( shk0[mdlIdx] , rak0[mdlIdx] )
+  for ( j in 1:nCond ) {
+    mu[j] ~ dbeta( aHyperbeta , bHyperbeta )
+    kappa[j] ~ dgamma( shk[j,mdlIdx] , rak[j,mdlIdx] )
+  }
+  
+  # Constants for hyperprior:
+  aHyperbeta <- 1
+  bHyperbeta <- 1
+  
+  # Actual priors:
+  shP <- 1.0 # shape for prior
+  raP <- 0.1 # rate for prior
+  # shape, rate kappa0[ model ]
+  shk0[2] <- shP
+  rak0[2] <- raP
+  # shape kappa[ condition , model ]
+  shk[1,1] <- shP
+  shk[2,1] <- shP
+  shk[3,1] <- shP
+  shk[4,1] <- shP
+  # rate kappa[ condition , model ]
+  rak[1,1] <- raP
+  rak[2,1] <- raP
+  rak[3,1] <- raP
+  rak[4,1] <- raP
+  
+  # Pseudo priors:
+  # shape, rate kappa0[ model ]
+  shk0[1] <- pow(12.312, 2) / pow(1.609, 2)
+  rak0[1] <- 12.312 / pow(1.609, 2)
+  # shape kappa[ condition , model ]
+  shk[1,2] <- pow(22.358, 2) / pow(18.557, 2)
+  shk[2,2] <- pow(10.0415, 2) / pow(2.829, 2)
+  shk[3,2] <- pow(12.219, 2) / pow(4.703, 2)
+  shk[4,2] <- pow(15.777, 2) / pow(4.607, 2)
+  # rate kappa[ condition , model ]
+  rak[1,2] <- 22.358 / pow(18.557, 2)
+  rak[2,2] <- 10.0415 / pow(2.829, 2)
+  rak[3,2] <- 12.219 / pow(4.703, 2)
+  rak[4,2] <- 15.777 / pow(4.607, 2)
+  
+  # Hyperprior on model index:
+  mdlIdx ~ dcat( modelProb[] )
+  modelProb[1] <- 0.003
+  modelProb[2] <- 0.997
+}
+```
+
+### 10.3.B) I prefer to show the density curves rather than the histogram....
+
+```{r jm2run}
+params = c("mu","kappa","kappa0","theta","mdlIdx")
+n.burnin = 1000
+n.chains = 1                 
+n.iter = 10000         
+n.thin = 1 
+
+jm2.fit <- jags(model.file=jm2,
+                data=data,
+                n.chains=n.chains,
+                n.burnin=n.burnin,
+                n.iter=n.iter,
+                n.thin=n.thin,
+                parameters.to.save=params,
+                DIC=F)
+
+jm2.df <- as.data.frame(as.matrix(as.mcmc(jm2.fit)))[,1:6]
+names(jm2.df)[5]<-'kappa[0]'
+
+jm2.mlt <- melt(jm2.df, id.vars='mdlIdx')
+
+post.plot <- ggplot(jm2.mlt, aes(x=value))+
+  geom_density()+facet_grid(mdlIdx~variable,labeller=label_parsed)+xlim(0,100)
+post.plot
+
+pM1 <- sum(jm2.df$mdlIdx==1)/nrow(jm2.df)
+pM2 <- (1 - pM1)
+
+BayesFactor <- (pM1/pM2)/(0.003/0.997)
+```
+
+
+### 10.3.C) The kappa values for the four groups are different. The way to get the Bayes factor is to divide the ratio of the model probabilities by the ratio of their prior believability. I get `r BayesFactor`. The Bayes factor doesn't say anything about which groups are different, only which model fits the data better overall.
+
+```{r diffs}
+
+mod1.df <- jm2.df[jm2.df$mdlIdx==1,]
+diff.df <- data.frame('1-2' = mod1.df[,1] - mod1.df[,2],
+                      '1-3' = mod1.df[,1] - mod1.df[,3],
+                      '1-4' = mod1.df[,1] - mod1.df[,4],
+                      '2-3' = mod1.df[,2] - mod1.df[,3],
+                      '2-4' = mod1.df[,2] - mod1.df[,4],
+                      '3-4' = mod1.df[,3] - mod1.df[,4])
+head(diff.df)
+
+diff.mlt <- melt(diff.df,variable.name='diff')
+
+levels(diff.mlt$diff)<-c('kappa[1]-kappa[2]','kappa[1]-kappa[3]','kappa[1]-kappa[4]','kappa[2]-kappa[3]','kappa[2]-kappa[4]','kappa[3]-kappa[4]')
+
+HPDIs <- data.frame(matrix(nrow=6, ncol=4))
+
+head(diff.mlt)
+
+names(HPDIs) <- c('diff','lower','mean','upper')
+for(i in 1:nrow(HPDIs)){
+  HPDIs$diff[i] <- levels(diff.mlt$diff)[i]
+  HPDIs$lower[i] <- quantile(diff.df[,i], 0.025)
+  HPDIs$mean[i] <- mean(diff.df[,i])
+  HPDIs$upper[i] <- quantile(diff.df[,i], 0.975)
+}
+
+HPDIs.mlt <- melt(HPDIs, id.vars='diff',variable.name='quantile')
+HPDIs.mlt$density <- NA
+
+HPDIs.mlt
+
+for (i in 1:nrow(HPDIs.mlt)){
+  HPDIs.mlt$density[i] <- density(n=1,diff.mlt[diff.mlt$diff==HPDIs.mlt$diff[i],'value'], 
+                                  from=HPDIs.mlt$value[i], to=HPDIs.mlt$value[i])$y
+}
+
+
+diff.plot <- ggplot(diff.mlt, aes(x=value))+geom_density()+
+  geom_segment(data=HPDIs.mlt, aes(x=value, xend=value, y=0, yend=density, linetype=quantile))
+
+  # geom_segment(data=HPDIs.mlt[HPDIs.mlt$variable=='lower',], aes(x=value, xend=value, y=0, yend=density))+
+#  geom_segment(data=HPDIs.mlt[HPDIs.mlt$variable=='upper',], aes(x=value, xend=value, y=0, yend=density))+
+# geom_segment(data=HPDIs.mlt[HPDIs.mlt$variable=='mean',], aes(x=value, xend=value, y=0, yend=density, linetype=))
+  
+diff.plot+facet_grid(~diff, labeller=label_parsed)
+
+HPDIs
+
+```
+
+Looks like from the plot of the distributions of the differences and the HPDIs of the differences that theta[1] is different than the rest, but all others are similar.

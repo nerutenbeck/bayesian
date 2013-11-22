@@ -25,8 +25,8 @@ likelihood = function( theta , data ) {
 # The argument theta could be a vector, not just a scalar.
 prior = function( theta ) {
   prior = rep( 1 , length(theta) ) # uniform density over [0,1]
-  # For kicks, here's a bimodal prior. To try it, uncomment the next line.
-  #prior = dbeta( pmin(2*theta,2*(1-theta)) ,2,2 )
+   # For kicks, here's a bimodal prior. To try it, uncomment the next line.
+   #prior = dbeta( pmin(2*theta,2*(1-theta)) ,2,2 )
   # The theta values passed into this function are generated at random,
   # and therefore might be inadvertently greater than 1 or less than 0.
   # The prior for theta > 1 or for theta < 0 is zero:
@@ -58,28 +58,28 @@ set.seed(47405)
 
 # Now generate the random walk. The 't' index is time or trial in the walk.
 for ( t in 1:(trajLength-1) ) {
-  currentPosition = trajectory[t]
-  # Use the proposal distribution to generate a proposed jump.
-  # The shape and variance of the proposal distribution can be changed
-  # to whatever you think is appropriate for the target distribution.
-  proposedJump = rnorm( 1 , mean = 0 , sd = 0.1 )
-  # Compute the probability of accepting the proposed jump.
-  probAccept = min( 1,
-                    targetRelProb( currentPosition + proposedJump , myData )
-                    / targetRelProb( currentPosition , myData ) )
-  # Generate a random uniform value from the interval [0,1] to
-  # decide whether or not to accept the proposed jump.
-  if ( runif(1) < probAccept ) {
-    # accept the proposed jump
-    trajectory[ t+1 ] = currentPosition + proposedJump
-    # increment the accepted counter, just to monitor performance
-    if ( t > burnIn ) { nAccepted = nAccepted + 1 }
-  } else {
-    # reject the proposed jump, stay at current position
-    trajectory[ t+1 ] = currentPosition
-    # increment the rejected counter, just to monitor performance
-    if ( t > burnIn ) { nRejected = nRejected + 1 }
-  }
+	currentPosition = trajectory[t]
+	# Use the proposal distribution to generate a proposed jump.
+	# The shape and variance of the proposal distribution can be changed
+	# to whatever you think is appropriate for the target distribution.
+	proposedJump = rnorm( 1 , mean = 0 , sd = 0.1 )
+	# Compute the probability of accepting the proposed jump.
+	probAccept = min( 1,
+		targetRelProb( currentPosition + proposedJump , myData )
+		/ targetRelProb( currentPosition , myData ) )
+	# Generate a random uniform value from the interval [0,1] to
+	# decide whether or not to accept the proposed jump.
+	if ( runif(1) < probAccept ) {
+		# accept the proposed jump
+		trajectory[ t+1 ] = currentPosition + proposedJump
+		# increment the accepted counter, just to monitor performance
+		if ( t > burnIn ) { nAccepted = nAccepted + 1 }
+	} else {
+		# reject the proposed jump, stay at current position
+		trajectory[ t+1 ] = currentPosition
+		# increment the rejected counter, just to monitor performance
+		if ( t > burnIn ) { nRejected = nRejected + 1 }
+	}
 }
 
 # Extract the post-burnIn portion of the trajectory.
@@ -90,7 +90,9 @@ acceptedTraj = trajectory[ (burnIn+1) : length(trajectory) ]
 #-----------------------------------------------------------------------
 # Display the posterior.
 
-source("g:/documents/coursework/bayesian/functions/plotPost.R")
+source("openGraphSaveGraph.R")
+source("plotPost.R")
+openGraph(width=5,height=5)
 mcmcInfo = plotPost( acceptedTraj , xlim=c(0,1) , xlab=bquote(theta) )
 
 # Display rejected/accepted ratio in the plot.
@@ -104,9 +106,9 @@ if ( meanTraj > .5 ) {
   xpos = 1.0 ; xadj = 1.0
 }
 text( xpos , 0.75*densMax ,
-      bquote(	N[pro] * "=" * .(length(acceptedTraj)) * "  " *
-                frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
-      ) , adj=c(xadj,0)  )
+	bquote(	N[pro] * "=" * .(length(acceptedTraj)) * "  " *
+	frac(N[acc],N[pro]) * "=" * .(signif( nAccepted/length(acceptedTraj) , 3 ))
+	) , adj=c(xadj,0)  )
 
 #------------------------------------------------------------------------
 # Evidence for model, p(D).
@@ -124,7 +126,7 @@ b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - 1 )
 # the likelihood and prior functions were defined to accept a vector argument,
 # not just a single-component scalar argument.
 wtdEvid = dbeta( acceptedTraj , a , b ) / (
-  likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
+		likelihood( acceptedTraj , myData ) * prior( acceptedTraj ) )
 pData = 1 / mean( wtdEvid )
 
 # Display p(D) in the graph
@@ -132,3 +134,6 @@ if ( meanTraj > .5 ) { xpos = 0.0 ; xadj = 0.0
 } else { xpos = 1.0 ; xadj = 1.0 }
 text( xpos , 0.9*densMax , bquote( p(D)==.( signif(pData,3) ) ) ,
       adj=c(xadj,0) , cex=1.5 )
+
+# Uncomment next line if you want to save the graph.
+saveGraph(file="BernMetropolisTemplate",type="eps")

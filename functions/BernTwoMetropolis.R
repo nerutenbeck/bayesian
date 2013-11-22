@@ -10,34 +10,34 @@ library(MASS)
 # Define the likelihood function.
 # The input argument is a vector: theta = c( theta1 , theta2 )
 likelihood = function( theta ) {
-  # Data are constants, specified here:
-  z1 = 5 ; N1 = 7 ; z2 = 2 ; N2 = 7
-  likelihood = ( theta[1]^z1 * (1-theta[1])^(N1-z1)
+	# Data are constants, specified here:
+	z1 = 5 ; N1 = 7 ; z2 = 2 ; N2 = 7
+	likelihood = ( theta[1]^z1 * (1-theta[1])^(N1-z1)
                  * theta[2]^z2 * (1-theta[2])^(N2-z2) )
-  return( likelihood )
+	return( likelihood )
 }
 
 # Define the prior density function.
 # The input argument is a vector: theta = c( theta1 , theta2 )
 prior = function( theta ) {
-  # Here's a beta-beta prior:
-  a1 = 3 ; b1 = 3 ; a2 = 3 ; b2 = 3
-  prior = dbeta( theta[1] , a1 , b1) * dbeta( theta[2] , a2 , b2) 
-  return( prior )
+	# Here's a beta-beta prior:
+	a1 = 3 ; b1 = 3 ; a2 = 3 ; b2 = 3
+	prior = dbeta( theta[1] , a1 , b1) * dbeta( theta[2] , a2 , b2) 
+	return( prior )
 }
 
 # Define the relative probability of the target distribution, as a function 
 # of theta.  The input argument is a vector: theta = c( theta1 , theta2 ). 
 # For our purposes, the value returned is the UNnormalized posterior prob.
 targetRelProb = function( theta ) {
-  if ( all( theta >= 0.0 ) & all( theta <= 1.0 ) ) {
-    targetRelProbVal =  likelihood( theta ) * prior( theta )
-  } else {
-    # This part is important so that the Metropolis algorithm
-    # never accepts a jump to an invalid parameter value.
-    targetRelProbVal = 0.0
-  }
-  return( targetRelProbVal )
+	if ( all( theta >= 0.0 ) & all( theta <= 1.0 ) ) {
+		targetRelProbVal =  likelihood( theta ) * prior( theta )
+	} else {
+		# This part is important so that the Metropolis algorithm
+		# never accepts a jump to an invalid parameter value.
+		targetRelProbVal = 0.0
+	}
+	return( targetRelProbVal )
 }
 
 # Specify the length of the trajectory, i.e., the number of jumps to try.
@@ -59,28 +59,28 @@ covarMat = matrix( c( sd1^2 , 0.00 , 0.00 , sd2^2 ) , nrow=nDim , ncol=nDim )
 
 # Now generate the random walk. stepIdx is the step in the walk.
 for ( stepIdx in 1:(trajLength-1) ) {
-  currentPosition = trajectory[stepIdx,]
-  # Use the proposal distribution to generate a proposed jump.
-  # The shape and variance of the proposal distribution can be changed
-  # to whatever you think is appropriate for the target distribution.
-  proposedJump = mvrnorm( n=1 , mu=rep(0,nDim), Sigma=covarMat )
-  # Compute the probability of accepting the proposed jump.
-  probAccept = min( 1,
-                    targetRelProb( currentPosition + proposedJump )
-                    / targetRelProb( currentPosition ) )
-  # Generate a random uniform value from the interval [0,1] to
-  # decide whether or not to accept the proposed jump.
-  if ( runif(1) < probAccept ) {
-    # accept the proposed jump
-    trajectory[ stepIdx+1 , ] = currentPosition + proposedJump
-    # increment the accepted counter, just to monitor performance
-    if ( stepIdx > burnIn ) { nAccepted = nAccepted + 1 }
-  } else {
-    # reject the proposed jump, stay at current position
-    trajectory[ stepIdx+1 , ] = currentPosition
-    # increment the rejected counter, just to monitor performance
-    if ( stepIdx > burnIn ) { nRejected = nRejected + 1 }
-  }
+	currentPosition = trajectory[stepIdx,]
+	# Use the proposal distribution to generate a proposed jump.
+	# The shape and variance of the proposal distribution can be changed
+	# to whatever you think is appropriate for the target distribution.
+	proposedJump = mvrnorm( n=1 , mu=rep(0,nDim), Sigma=covarMat )
+	# Compute the probability of accepting the proposed jump.
+	probAccept = min( 1,
+		targetRelProb( currentPosition + proposedJump )
+		/ targetRelProb( currentPosition ) )
+	# Generate a random uniform value from the interval [0,1] to
+	# decide whether or not to accept the proposed jump.
+	if ( runif(1) < probAccept ) {
+		# accept the proposed jump
+		trajectory[ stepIdx+1 , ] = currentPosition + proposedJump
+		# increment the accepted counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nAccepted = nAccepted + 1 }
+	} else {
+		# reject the proposed jump, stay at current position
+		trajectory[ stepIdx+1 , ] = currentPosition
+		# increment the rejected counter, just to monitor performance
+		if ( stepIdx > burnIn ) { nRejected = nRejected + 1 }
+	}
 }
 
 # End of Metropolis algorithm.
@@ -110,11 +110,11 @@ if ( meanTraj[1] > .5 ) { xpos = 0.0 ; xadj = 0.0
 if ( meanTraj[2] > .5 ) { ypos = 0.0 ; yadj = 0.0
 } else { ypos = 1.0 ; yadj = 1.0 }
 text( xpos , ypos ,	bquote(
-  "M=" * .(signif(meanTraj[1],3)) * "," * .(signif(meanTraj[2],3))
-  * "; " * N[pro] * "=" * .(dim(acceptedTraj)[1])
-  * ", " * frac(N[acc],N[pro]) * "=" 
-  * .(signif(nAccepted/dim(acceptedTraj)[1],3))
-) , adj=c(xadj,yadj) , cex=1.5  )
+	"M=" * .(signif(meanTraj[1],3)) * "," * .(signif(meanTraj[2],3))
+	* "; " * N[pro] * "=" * .(dim(acceptedTraj)[1])
+	* ", " * frac(N[acc],N[pro]) * "=" 
+	* .(signif(nAccepted/dim(acceptedTraj)[1],3))
+	) , adj=c(xadj,yadj) , cex=1.5  )
 
 
 # Evidence for model, p(D).
@@ -129,14 +129,14 @@ b = (1-meanTraj) * ( (meanTraj*(1-meanTraj)/sdTraj^2) - rep(1,nDim) )
 # i.e., not just relative probabilities. 
 wtd_evid = rep( 0 , dim(acceptedTraj)[1] )
 for ( idx in 1 : dim(acceptedTraj)[1] ) {
-  wtd_evid[idx] = ( dbeta( acceptedTraj[idx,1],a[1],b[1] )
-                    * dbeta( acceptedTraj[idx,2],a[2],b[2] ) /
-                      ( likelihood(acceptedTraj[idx,]) * prior(acceptedTraj[idx,]) ) )
+	wtd_evid[idx] = ( dbeta( acceptedTraj[idx,1],a[1],b[1] )
+		* dbeta( acceptedTraj[idx,2],a[2],b[2] ) /
+		( likelihood(acceptedTraj[idx,]) * prior(acceptedTraj[idx,]) ) )
 }
 pdata = 1 / mean( wtd_evid )
 # Display p(D) in the graph
 text( xpos , ypos+(.12*(-1)^(ypos)) , bquote( "p(D) = " * .(signif(pdata,3)) ) ,
-      adj=c(xadj,yadj) , cex=1.5 )
+	  adj=c(xadj,yadj) , cex=1.5 )
 
 ## Change next line if you want to save the graph.
 want_saved_graph = FALSE # TRUE or FALSE
@@ -145,7 +145,7 @@ if ( want_saved_graph ) { saveGraph(file="BernTwoMetropolis",type="eps") }
 # Estimate highest density region by evaluating posterior at each point.
 npts = dim( acceptedTraj )[1] ; postProb = rep( 0 , npts )
 for ( ptIdx in 1:npts ) {
-  postProb[ptIdx] = targetRelProb( acceptedTraj[ptIdx,] )
+    postProb[ptIdx] = targetRelProb( acceptedTraj[ptIdx,] )
 }
 # Determine the level at which credmass points are above:
 credmass = 0.95

@@ -1,0 +1,108 @@
+Doing Bayesian Data Analysis
+Chapter 11 Homework
+========================================================
+
+## Nathan E. Rutenbeck
+
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+```{r settings, message=FALSE, warning=FALSE, echo=FALSE, }
+require(knitr)
+require(ggplot2)
+require(reshape2)
+require(plyr)
+require(R2jags)
+require(pander)
+opts_chunk$set(message=FALSE, warning=FALSE, echo=FALSE, fig.width=11)
+```
+
+## 11.2) NHST confidence intervals
+
+```{r tab1}
+tab1 <- data.frame ('theta' = seq(0.14,0.15, by=0.001), 'p.value'=NA)
+for (i in 1:nrow(tab1)){
+  tab1$p.value[i] <- sum(dbinom(8:26,26,tab1$theta[i]))
+}
+pandoc.table(tab1, digits=4, type='rmarkdown')
+
+```
+
+### 11.2.A) The code gives $p(z \geq 8); z \sim B(26,\theta)$ for $\theta=\{0.14,0.141,0.142,...,0.150\}$. It shows that when $\theta > 0.144$ $p(z \geq 8) > 0.025$.
+
+### 11.2.B) Show that when $\theta=0.517, p(z \leq 8) >0.025$ but when $\theta>0.517, p(z \geq 8) <0.025$.
+
+
+```{r tab2}
+tab2 <- data.frame ('theta' = seq(0.51,0.52, by=0.001), 'p.value'=NA)
+for (i in 1:nrow(tab2)){
+  tab2$p.value[i] <- sum(dbinom(0:8,26,tab2$theta[i]))
+}
+pandoc.table(tab2, digits=4, type='rmarkdown')
+
+```
+
+### 11.2.C) 95% CI for $\theta|z=8,n=26; z \sim B(\theta,n)$ is approximately $\theta=[0.143,0.518]$
+
+### 11.2.D) Instead of using the binomial distribution we would have to use the negative binomial distribution for waiting time. Results are below. 95% CI for $\theta$ is now $[0.143,0.493]$
+
+```{r tab3}
+tab3 <- data.frame ('theta' = seq(0.14,0.15, by=0.001), 'p.value'=NA)
+for (i in 1:nrow(tab3)){
+  tab3$p.value[i] <- round(sum(dnbinom(0:18,8,tab3$theta[i])),3)
+}
+pandoc.table(tab3, digits=4, type='rmarkdown')
+
+tab4 <- data.frame('theta' = seq(.49, 0.5, by =0.001), 'p' = NA)
+for (i in 1:nrow(tab4)){
+  tab4$p.value[i] <- round(sum(dnbinom(18:26,8,tab4$theta[i])),3)
+}
+pandoc.table(tab4, digits=4, type='rmarkdown')
+
+```
+
+## 11.3) Determine the p-value if a coin is flipped for a fixed period of time.
+
+```{r q3A, echo=TRUE}
+
+sum(dbinom(30:46, 46, 0.5)) < 0.025
+
+```
+
+### 11.3.A) We fail to reject the null because $p(\theta=0.5|z=30, n=46) | z \sim B(\theta,n) > 0.025$
+
+### 11.3.B) Include a Poisson model for $p(n)$.
+
+```{r q3B, echo=TRUE}
+z_obs = 30 ; N_obs = 46
+nulltheta = .5
+tail_prob = 0  # Zero initial value for accumulation over possible N.
+for ( N in 1 : (3*N_obs) ) {  # Start at 1 to avoid /0. 3*N_obs is arbitrary.
+  # Create vector of z values such that z/N >= z_obs/N_obs
+  zvec = (0:N)[ (0:N)/N >= z_obs/N_obs ]
+  tail_prob = tail_prob + (
+                dpois( N , N_obs ) * sum( dbinom( zvec , N , nulltheta ) ) )
+}
+show( tail_prob )
+```
+
+### We now reject the null hypthesis because $p(\theta = 0.5 | z=30, n=46) | z \sim B(\theta,n), n \sim Pois(\lambda=46) < 0.025$
+
+### 11.3.C) Repeat for $z=26$, $n=39$
+
+
+```{r q3C, echo=TRUE}
+z_obs = 26 ; N_obs = 39
+nulltheta = .5
+tail_prob = 0  # Zero initial value for accumulation over possible N.
+for ( N in 1 : (3*N_obs) ) {  # Start at 1 to avoid /0. 3*N_obs is arbitrary.
+  # Create vector of z values such that z/N >= z_obs/N_obs
+  zvec = (0:N)[ (0:N)/N >= z_obs/N_obs ]
+  tail_prob = tail_prob + (
+                dpois( N , N_obs ) * sum( dbinom( zvec , N , nulltheta ) ) )
+}
+show( tail_prob )
+```
+
+### In the above code I assumed that the parameterization of $\lambda$ in the Poisson model for $n$ changed along with the total number of observations. In this case we still reject the null hypothesis because $p(\theta = 0.5 | z=26, n=39) | z \sim B(\theta,n), n \sim Pois(\lambda=39) < 0.025$. If $\lambda = 46$, but $n=39$ and $z=26$ the probability of a Type I error goes down even further.
