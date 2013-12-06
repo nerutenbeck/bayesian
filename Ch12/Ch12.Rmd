@@ -1,0 +1,273 @@
+Doing Bayesian Data Analysis
+=============================
+
+Chapter 12 & 13 Homework
+------------------------
+  
+## Nathan E. Rutenbeck
+  
+[GitHub repository for all courswork] (http://github.com/nerutenbeck/bayesian)
+
+--------------------------------------------------------
+
+## 12.2) The hot hand revisted (with Stan!)
+
+```{r hothand, echo = FALSE, message = FALSE, results='hide'}
+library(rstan)
+library(reshape2)
+library(ggplot2)
+
+### Stan fit of a basic Bernoulli model
+
+newhot.mod <- '
+  
+  data {
+    int <lower = 0> D; 
+    int <lower = 0> N[D]; 
+    int <lower = 0> z[D];
+  }
+
+  parameters{
+    real <lower = 0, upper = 1> mu;
+    real <lower = 0, upper = 1> delta;
+  }
+  
+  transformed parameters{
+    vector[D] theta;
+    vector[D] deflect;
+    for (d in 1 : D){
+      deflect[d] <- (delta - 0.5) * 2 * fmin(mu, 1 - mu);
+      theta[1] <- mu + deflect[d];
+      theta[2] <- mu - deflect[d];
+    }
+  }
+
+  model {
+    mu ~ beta(16, 6);
+    delta ~ beta(1, 1);
+    for (d in 1 : D) {
+      z[d] ~ binomial(N[d], theta[d]);
+    }
+  }
+'
+
+### Fit with blank data
+
+blank.data <- list(
+  D = 2,
+  N = c(0, 0),
+  z = c(0, 0)
+  )
+
+system.time(
+  notfit <- stan(model_code = newhot.mod, data = blank.data, iter = 10000, chains = 4)
+)
+
+print(notfit)
+
+notfit.df <- as.data.frame(notfit)
+
+notfit.df$diff <- notfit.df[, 3] - notfit.df[, 4]
+
+notfit.plot <- ggplot(notfit.df, aes(x = notfit.df[, 3], y = notfit.df[, 4])) + 
+  geom_point(color = "#0000FF", size = 0.1) + 
+  geom_density2d(color = 'black') + 
+  geom_abline(intercept = 0, slope = 1, lty=2) + 
+  xlim(0,1) + ylim(0,1) + 
+  xlab(expression(theta[1])) + ylab(expression(theta[2]))
+
+
+make_HDI_df <- function(vector, alpha){
+  out <- data.frame(matrix(nrow=2, ncol=2))
+  row.names(out) <- c('lower','upper')
+  names(out) <- c('quantile', 'density')
+  out$quantile <- c(quantile(vector, alpha/2), 
+                    quantile(vector, 1 - alpha/2))
+  out$density <- c(density(vector, from = out[1,1], to = out[1,1], n=1)$y,
+                   density(vector, from = out[2,1], to = out[2,1], n=1)$y)
+  return(out)
+}
+
+(nodiff.HDIdens <- make_HDI_df(notfit.df$diff, 0.05))
+
+NERope <- function(interval, vector){
+  low <- interval[1]
+  high <- interval[2]
+  pctIn <- (sum(vector > low & vector < high) / length(vector) )
+  out <- list(
+    'low' = low,
+    'high' = high,
+    'pctIn' = pctIn)
+  return(as.data.frame(out))
+}
+
+(nodiff.ROPE <- with(notfit.df, NERope(c(-0.05, 0.05), diff)))
+
+notfit.densplot <- ggplot(notfit.df, aes(x = diff)) + 
+  
+  geom_segment(data = nodiff.HDIdens, aes(x = quantile, 
+                                        xend = quantile, 
+                                        y = c(0,0), 
+                                        yend = density), 
+               color = 'red', size = 2) +
+  
+  geom_density(adjust=1 , size = 2) + ylim(0, 1.3) + ylab('density') +
+  xlab(expression(theta[AfterSuccess] - theta[AfterFailure])) +
+
+  geom_text(x = 0.0, y = 1.2, 
+            label = paste('Mean=', round(mean(notfit.df$diff), 4)))+
+  
+  geom_text(x = nodiff.HDIdens$quantile[1], y = 0.3, 
+            label = round(nodiff.HDIdens$quantile[1], 3)) +
+  
+  geom_text(x = nodiff.HDIdens$quantile[2], y = 0.3, 
+            label = round(nodiff.HDIdens$quantile[2], 5)) +
+  
+  geom_text(x=0, y = density(notfit.df$diff, from = 0.5, to = 0.5, n = 1)$y, 
+            label = paste(nodiff.ROPE$pctIn*100, '% in ROPE')) +
+  
+  geom_segment(data= nodiff.ROPE, aes(x = c(low, high), 
+                                      xend = c(low, high), 
+                                      y = c(0,0), 
+                                      yend = c(0.4, 0.4)))
+
+### Now add data
+
+hotbin.data <- list(
+  D = 2,
+  N = c(285, 53),
+  z = c(251, 48)
+)
+
+system.time(
+  hotfit <- stan(fit = notfit, data = hotbin.data, iter= 10000, chains=4)
+) # so fast!
+
+print(hotfit)
+
+hotfit.df <- as.data.frame(hotfit)
+
+hotfit.df$diff <- hotfit.df[, 3] - hotfit.df[, 4]
+
+hotfit.plot <- ggplot(hotfit.df, aes(x = hotfit.df[, 3], y = hotfit.df[, 4])) + 
+  geom_point(color = "#0000FF", size = 0.1) + 
+  geom_density2d(color = 'black') + 
+  geom_abline(intercept = 0, slope = 1, lty=2) + 
+  xlim(0,1) + ylim(0,1) +
+  xlab(expression(theta[1])) + ylab(expression(theta[2]))
+
+(hotdiff.HDI <- make_HDI_df(hotfit.df$diff, alpha = 0.05))
+
+(hotdiff.ROPE <- with(hotfit.df, NERope(c(-0.05, 0.05), diff)))
+
+
+hotdiff.plot <- ggplot(hotfit.df, aes(x = diff)) + 
+  
+  geom_segment(data = hotdiff.HDI, aes(x = quantile, 
+                                       xend = quantile, 
+                                       y = c(0,0), 
+                                       yend = density), 
+               color = 'red', size = 2) +
+  
+  geom_density(adjust=1 , size = 2)  + ylab('density') +
+  xlab(expression(theta[AfterSuccess] - theta[AfterFailure])) +
+
+  geom_text(x = 0.0, y = 6, 
+            label = paste('Mean=', round(mean(hotfit.df$diff), 4)))+
+  
+  geom_text(x = hotdiff.HDI$quantile[1], y = 2.7, 
+            label = round(hotdiff.HDI$quantile[1], 3)) +
+  
+  geom_text(x = hotdiff.HDI$quantile[2], y = 2.7, 
+            label = round(hotdiff.HDI$quantile[2], 5)) +
+  
+  geom_text(x=0, y = 1.5, 
+            label = paste(hotdiff.ROPE$pctIn*100, '% in ROPE')) +
+  
+  geom_segment(data= hotdiff.ROPE, aes(x = c(low, high), 
+                                      xend = c(low, high), 
+                                      y = c(0,0), 
+                                      yend = c(1.5, 1.5)))
+```
+
+
+### 12.2.A) Fit without data (or is this just not fitting? Hmm...)
+
+```{r 12.2A, echo = FALSE, fig.width = 10, fig.height = 10}
+
+print(notfit)
+traceplot(notfit)
+plot(notfit)
+notfit.plot
+notfit.densplot
+```
+
+
+### 12.2.B) Fit the model to the data.
+
+```{r 12.2B, echo = FALSE, fig.width =10, fig.height = 10}
+print(hotfit)
+traceplot(hotfit)
+plot(hotfit)
+hotfit.plot
+hotdiff.plot
+```
+
+### Because the ROPE is inside the highest posterior density interval, we 'fail to reject' the null hypothesis of no difference between success after success and success after failure. I believe another way of looking at this is to say there is a 71.13% probability that the population parameter value is in the region of practical equivalence to zero.
+
+### 12.3) Thematic apperperception test 
+
+```{r TAT}
+
+tat.data <- list(M = 2,
+                 N = 10,
+                 L = 20,
+                 norm = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4),
+                 schz = c(2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2)
+  )
+
+tat.model <-'
+  
+  data{
+    int <lower = 0> M;
+    int <lower = 0> N;
+    int <lower = 0> L;
+    vector[L] norm;
+    vector[L] sch;
+  }
+  
+  parameters{
+    real <lower = 0, upper = 1> theta[norm];
+    real <lower = 0, upper = 1> theat[schz];
+    real <lower = 0, upper = 1> mu;
+  }
+
+
+  }
+  model{
+  }
+'
+
+model {
+   for ( subjIdx in 1:nSubj ) {
+      # Likelihood:
+      z[subjIdx] ~ dbin( theta[subjIdx] , N[subjIdx] )
+      # Prior on theta: Notice nested indexing.
+      theta[subjIdx] ~ dbeta( a[cond[subjIdx]] , b[cond[subjIdx]] )T(0.001,0.999)
+   }
+   for ( condIdx in 1:nCond ) {
+      a[condIdx] <- mu[condIdx] * kappa[condIdx]
+      b[condIdx] <- (1-mu[condIdx]) * kappa[condIdx]
+      # Hyperprior on mu and kappa:
+      mu[condIdx] ~ dbeta( Amu , Bmu )
+      kappa[condIdx] ~ dgamma( Skappa , Rkappa )
+   }
+   # Constants for hyperprior:
+   Amu <- 1
+   Bmu <- 1
+   Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
+   Rkappa <- meanGamma/pow(sdGamma,2)
+   meanGamma <- 10
+   sdGamma <- 10
+}
+```
