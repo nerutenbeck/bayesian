@@ -219,34 +219,83 @@ hotdiff.plot
 
 ```{r TAT}
 
-tat.data <- list(M = 2,
+tat.data <- list(nCond = 2,
                  N = 10,
-                 L = 20,
-                 norm = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4),
-                 schz = c(2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2)
+                 nSubj = 40,
+                 subj = c(1:40),
+                 cond = c(rep(1, 20), rep(2, 20)),
+                 z = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4,
+                       2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2)
   )
 
 tat.model <-'
   
   data{
-    int <lower = 0> M;
+    int <lower = 0> nCond;
+    int <lower = 0> nSubj;
     int <lower = 0> N;
-    int <lower = 0> L;
-    vector[L] norm;
-    vector[L] sch;
+    vector[nSubj] z;
+    vector[nCond] cond;
   }
   
   parameters{
-    real <lower = 0, upper = 1> theta[norm];
-    real <lower = 0, upper = 1> theat[schz];
-    real <lower = 0, upper = 1> mu;
+    vector[nSubj] theta;
+    vector[nCond] mu;
+    vector[nCond] kappa;
   }
 
+  transformed parameters{
+
+  }
 
   }
   model{
+    for (i in 1:nSubj){
+      z[i] ~ binomial(N, theta[subj[i]]);
+      theta[i] ~ beta(a[cond[i]], b[cond[i]])
+    }
   }
 '
+
+
+tat.model <-'
+  
+  data{
+    int <lower = 0> nCond;
+    int <lower = 0> nSubj;
+    int <lower = 0> N;
+    vector[nSubj] z;
+    int <lower = 1, upper = 2> cond;
+  }
+  
+  parameters{
+    real<lower = 0, upper = 1> theta[nSubj];
+    real<lower = 0, upper = 1> mu[nCond];
+    real<lower = 0, upper = 1000> kappa[nCond];
+  }
+
+  transformed parameters{
+    vector[nSubj] a;
+    vector[nSubj] b;
+    for (i in 1 : nSubj){
+      a[i] <- mu[cond] * kappa[cond];
+      b[i] <- 1 - mu[cond] * kappa[cond];
+    };
+  }
+
+  model{
+    for ( i in 1 : nSubj)
+      z[nSubj] ~ binomial(N, theta);
+    theta ~ beta(a, b);
+    for (i in 1 : nCond){
+      mu[i] ~ beta(3.6, 6.5);
+      kappa[i] ~ gamma(10, 0.1);
+    };
+  }
+'
+
+test <- stan(model_code = tat.model, data = tat.data, iter = 10000, chains = 3)
+
 
 model {
    for ( subjIdx in 1:nSubj ) {
