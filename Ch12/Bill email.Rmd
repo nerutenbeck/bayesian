@@ -1,0 +1,65 @@
+STAN for TAT
+========================================================
+
+Below is the model that I specified along with data, inits, etc. It was really very tricky to get it to fit at all - I had to give initialization values or it wouldn't fit at all. Now I am getting CRAZY numbers for the fit, as you see below, however. I think I have the model in the desired form for the exercise, so am perplexed about why it basically blows up.
+
+I am attaching a text file with the model specification as well, since I know it doesn't come out great here. Any thoughts?
+
+```{r tat model}
+library(rstan)
+
+
+tat.data <- list(SubjIdx = 40,
+                  CondIdx = 2,
+                  N = rep(10, 40),
+                  Cond = c(rep(1, 20), rep(2, 20)),
+                  z = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4,
+                       2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2))
+
+test.model <-'
+  data{
+    int <lower = 0> SubjIdx;
+    int <lower = 0> CondIdx;
+    int <lower = 0> Cond[SubjIdx];
+    int <lower = 0> N[SubjIdx];
+    int <lower = 0> z[SubjIdx];
+  }
+
+  parameters{
+    real <lower = 0, upper = 1> theta[SubjIdx];
+    real <lower = 0, upper = 1> mu[CondIdx];
+    real <lower = 0, upper = 1000> kappa[CondIdx];
+  }
+  
+  transformed parameters {
+    real <lower = 0, upper = 100> a[CondIdx];
+    real <lower = 0, upper = 100> b[CondIdx];
+    for (i in 1 : CondIdx){
+      a[CondIdx] <- mu[CondIdx] * kappa[CondIdx];
+      b[CondIdx] <- (1 - mu[CondIdx]) * kappa[CondIdx];
+    }
+  }
+  model{
+    for (i in 1 : SubjIdx){
+      z[i] ~ binomial(N, theta[i]);
+      theta[i] ~ beta(a[Cond[i]], b[Cond[i]]);
+    }
+    for (i in 1 : CondIdx){
+      mu[CondIdx] ~ beta(3.6, 6.5);
+      kappa[CondIdx] ~ gamma(10, 0.1);
+    }
+  }
+'
+inits <- function(){
+  list(theta = c(runif(40, 0, 1)), 
+       mu = c(runif(2, 0, 1)),
+       kappa = c(runif(2, 0, 1000)))
+}
+
+test <- stan(model_code = test.model, data = tat.data, iter = 10000, chains = 3, init = inits)
+
+print(test)
+
+
+```
+
