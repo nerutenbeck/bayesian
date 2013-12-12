@@ -234,6 +234,14 @@ tat.stan <-'
   transformed parameters {
     real <lower = 0, upper = 100> a[nCond];
     real <lower = 0, upper = 100> b[nCond];
+    real <lower = 0, upper = 100> muA;
+    real <lower = 0, upper = 100> muB;
+    real <lower = 0, upper = 100> shK;
+    real <lower = 0, upper = 100> rK;
+    muA <- 3.5;
+    muB <- 6.5;
+    shK <- 10;
+    rK <- 0.1;
     for (i in 1 : nCond){
       a[i] <- mu[i] * kappa[i];
       b[i] <- (1 - mu[i]) * kappa[i];
@@ -241,12 +249,12 @@ tat.stan <-'
   }
   model{
     for (i in 1 : nSubj){
-      z[i] ~ binomial(N, theta[i]);
+      z[i] ~ binomial(N[i], theta[i]);
       theta[i] ~ beta(a[Cond[i]], b[Cond[i]]);
     }
     for (i in 1 : nCond){
-      mu[i] ~ beta(3.6, 6.5);
-      kappa[i] ~ gamma(10, 0.1);
+      mu[i] ~ beta(muA, muB);
+      kappa[i] ~ gamma(shK, rK);
     }
   }
 '
@@ -300,42 +308,6 @@ diff.plot <- ggplot(mu.df, aes(x = diff)) + geom_density() +
   geom_text(data = mu.df, aes(x = mean(diff), y = diff.HDI$density[1], 
                               label = '95% HDI Interval')) + ylim(-0.5, 10)  
 
-# STAN was blowing up, but today (12/8) it works!
-# 
-# tat.data <- list(nSubj = 40,
-#                  nCond = 2,
-#                  N = rep(10, 40),
-#                  Cond = c(rep(1, 20), rep(2, 20)),
-#                  z = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4,
-#                        2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2))
-# 
-# library(R2jags)
-# 
-# tat.mod <- function() {
-#   for ( i in 1 : nSubj ) {
-#     # Likelihood:
-#     z[i] ~ dbin( theta[i] , N[i])
-#     # Prior on theta
-#     theta[i] ~ dbeta( a[Cond[i]] , b[Cond[i]])
-#     }
-#   for ( i in 1 : nCond ) {
-#     a[i] <- mu[i] * kappa[i]
-#     b[i] <- (1-mu[i]) * kappa[i]
-#     # Hyperprior on mu and kappa:
-#     mu[i] ~ dbeta( Amu , Bmu )
-#     kappa[i] ~ dgamma( Skappa , Rkappa )
-#     }
-#   # Constants for hyperprior:
-#   Amu <- 3.5
-#   Bmu <- 6.5
-#   Skappa <- pow(meanGamma,2)/pow(sdGamma,2)
-#   Rkappa <- meanGamma/pow(sdGamma,2)
-#   meanGamma <- 10
-#   sdGamma <- 10
-#   }
-# 
-# jagsfit <- jags(data = tat.data, model.file = tat.mod, inits = inits, parameters.to.save = c('theta', 'mu', 'kappa', 'a', 'b'), n.chains = 3, n.iter = 5000, n.burnin = 500, n.thin = 3)
-
 
 ```
 
@@ -350,7 +322,16 @@ diff.plot
 
 ### 12.3.B)
 
-```{r}
+```{r comparison}
+
+
+tat.data <- list(nMod = 2,
+                 nCond = 2,
+                 nSubj = 40,
+                 Cond = c(rep(1, 20), rep(2, 20)),
+                 N = rep(10, 40),
+                 z = c(8, 4, 6, 3, 1, 4, 4, 6, 4, 2, 2, 1, 1, 4, 3, 3, 2, 6, 3, 4,
+                       2, 1, 1, 3, 2, 7, 2, 1, 3, 1, 0, 2, 4, 2, 3, 3, 0, 1, 2, 2))
 
 
 tat.comp <-'
@@ -360,37 +341,62 @@ tat.comp <-'
     int <lower = 0> Cond[nSubj];
     int <lower = 0> N[nSubj];
     int <lower = 0> z[nSubj];
+    int <lower = 1, upper = 2> nMod;
   }
 
   parameters{
     real <lower = 0, upper = 1> theta[nSubj];
     real <lower = 0, upper = 1> mu[nCond];
     real <lower = 0, upper = 1000> kappa[nCond];
+    real <lower = 0, upper = 1000> kappa0;
+    vector[nMod] modProbs;
   }
   
   transformed parameters {
     real <lower = 0, upper = 100> a[nCond];
     real <lower = 0, upper = 100> b[nCond];
-    real <lower = 0, upper = 100> shk
-    if (modIdx = 1)
-      for (i in 1 : nCond){
-        a[i] <- mu[i] * kappa[i];
-        b[i] <- (1 - mu[i]) * kappa[i];
-      }
-    else
-      for (i in 1 : nCond){
-        a[i] <- mu[i] * 
-      }
+    real <lower = 0, upper = 100> muA;
+    real <lower = 0, upper = 100> muB;
+    real <lower = 0, upper = 100> shK;
+    real <lower = 0, upper = 100> rK;
+    muA <- 3.5;
+    muB <- 6.5;
+    shK <- 10;
+    rK <- 0.1;
+    for (i in 1 : nCond){
+      a[i] <- mu[i] * if_else(nMod == 1, kappa[i], kappa0);
+      b[i] <- (1 - mu[i]) * if_else(nMod == 1, kappa[i], kappa0);
+    }
   }
+
   model{
+    modProbs ~ beta(2, 2);
+    nMod ~ categorical(modProbs);
     for (i in 1 : nSubj){
-      z[i] ~ binomial(N, theta[i]);
+      z[i] ~ binomial(N[i], theta[i]);
       theta[i] ~ beta(a[Cond[i]], b[Cond[i]]);
     }
     for (i in 1 : nCond){
-      mu[i] ~ beta(3.6, 6.5);
-      kappa[i] ~ gamma(10, 0.1);
+      mu[i] ~ beta(muA, muB); 
+      kappa[i] ~ gamma(shK, rK);
     }
+    kappa0 ~ gamma(shK, rK);
   }
 '
+inits <- function(){
+  list(theta = c(runif(40, 0, 1)), 
+       mu = c(runif(2, 0, 1)),
+       kappa = c(runif(2, 0, 100)),
+       kappa0 = runif(1, 0, 100),
+       nMod = rbinom(n = 1, size = 1, prob = 0.5) + 1,
+       modProbs = c(runif(2, 0, 1)))
+}
+
+tatcomp.fit <- stan(model_code = tat.comp, data = tat.data, iter = 10000, chains = 3, init = inits)
+
+print(tatcomp.fit) # Well, this clearly doesn't work...
+
 ```
+
+
+### 13.3
