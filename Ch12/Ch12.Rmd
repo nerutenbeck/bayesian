@@ -399,4 +399,12 @@ print(tatcomp.fit) # Well, this clearly doesn't work...
 ```
 
 
-### 13.3
+### 13.3 Filcon Power
+
+```{r Filcon}
+
+
+
+```
+
+
