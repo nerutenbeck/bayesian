@@ -20,17 +20,7 @@ library(ggplot2)
 ### Stan fit of a basic Bernoulli model
 
 newhot.mod <- '
-  
-  data {
-    int <lower = 0> D; 
-    int <lower = 0> N[D]; 
-    int <lower = 0> z[D];
-  }
-
-  parameters{
-    real <lower = 0, upper = 1> mu;
-    real <lower = 0, upper = 1> delta;
-  }
+    
   
   transformed parameters{
     vector[D] theta;
